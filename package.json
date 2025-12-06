@@ -1,67 +1,16 @@
-import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
-export default function Home() {
-  const [url, setUrl] = useState('');
-  const [bookmarks, setBookmarks] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  // Load bookmarks when page opens
-  useEffect(() => {
-    fetchBookmarks();
-  }, []);
-
-  async function fetchBookmarks() {
-    const { data } = await supabase.from('bookmarks').select('*').order('id', { ascending: false });
-    if (data) setBookmarks(data);
+{
+  "name": "my-pocket",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "@supabase/supabase-js": "latest",
+    "cheerio": "latest"
   }
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setLoading(true);
-    // Call our API backend
-    await fetch('/api/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ link: url }),
-    });
-    setUrl('');
-    fetchBookmarks();
-    setLoading(false);
-  }
-
-  return (
-    <div style={{ maxWidth: '600px', margin: '50px auto', fontFamily: 'sans-serif' }}>
-      <h1>My Pocket</h1>
-      
-      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
-        <input 
-          type="url" 
-          value={url} 
-          onChange={(e) => setUrl(e.target.value)} 
-          placeholder="Paste link here..." 
-          required 
-          style={{ flex: 1, padding: '10px' }}
-        />
-        <button disabled={loading} style={{ padding: '10px 20px' }}>
-          {loading ? 'Saving...' : 'Save'}
-        </button>
-      </form>
-
-      <div style={{ marginTop: '30px' }}>
-        {bookmarks.map((item) => (
-          <div key={item.id} style={{ border: '1px solid #ddd', margin: '10px 0', padding: '10px', borderRadius: '8px' }}>
-            {item.image && <img src={item.image} style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '4px' }} />}
-            <h3><a href={item.url} target="_blank">{item.title || item.url}</a></h3>
-            <p style={{ color: '#666' }}>{item.summary}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
