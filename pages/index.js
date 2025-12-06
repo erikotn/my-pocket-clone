@@ -1,6 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import Head from 'next/head';
+import { useRouter } from 'next/router';
 
 export default function Home() {
+  const router = useRouter();
+  
   const [password, setPassword] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [bookmarks, setBookmarks] = useState([]);
@@ -8,10 +12,7 @@ export default function Home() {
   // Form States
   const [url, setUrl] = useState('');
   const [tags, setTags] = useState('');
-  
-  // Filter States
   const [activeTag, setActiveTag] = useState(''); 
-  const [searchQuery, setSearchQuery] = useState(''); // <--- NEW: Search State
   
   // EDITING STATES
   const [editingId, setEditingId] = useState(null); 
@@ -21,10 +22,69 @@ export default function Home() {
   const [message, setMessage] = useState('');
 
   // ---------------------------------------------------------
+  // 0. INITIALIZATION (Login Check & Share Catching)
+  // ---------------------------------------------------------
+  
+  useEffect(() => {
+    // A. Check if password is saved in LocalStorage
+    const savedPassword = localStorage.getItem('MY_POCKET_PASSWORD');
+    if (savedPassword) {
+      setPassword(savedPassword);
+      checkLogin(savedPassword);
+    }
+  }, []);
+
+  useEffect(() => {
+    // B. Check if Android shared a link with us
+    if (!router.isReady) return;
+    
+    // Android sends 'text' (usually the URL) or 'title'
+    const { text, title, link } = router.query;
+    const sharedUrl = text || link; // 'text' is the most common for shared URLs
+
+    if (sharedUrl) {
+      // Sometimes Android shares "Check this out: https://url..." 
+      // We extract just the URL part if possible
+      const urlMatch = sharedUrl.match(/(https?:\/\/[^\s]+)/);
+      if (urlMatch) {
+        setUrl(urlMatch[0]);
+      } else {
+        setUrl(sharedUrl);
+      }
+    }
+  }, [router.isReady, router.query]);
+
+  // ---------------------------------------------------------
   // 1. DATA LOGIC
   // ---------------------------------------------------------
 
+  async function checkLogin(passToUse) {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: passToUse }),
+      });
+      const json = await res.json();
+      if (json.error) {
+        // Only clear if user manually typed it, otherwise silent fail
+        if (!localStorage.getItem('MY_POCKET_PASSWORD')) setMessage('❌ ' + json.error);
+      } else {
+        setBookmarks(json.data);
+        setIsLoggedIn(true);
+        // SAVE PASSWORD TO PHONE so you stay logged in
+        localStorage.setItem('MY_POCKET_PASSWORD', passToUse);
+        setMessage('');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setLoading(false);
+  }
+
   async function refreshList() {
+    // Use the state password
     const res = await fetch('/api/fetch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -36,26 +96,14 @@ export default function Home() {
 
   async function handleLogin(e) {
     e.preventDefault();
-    setLoading(true);
     setMessage('Unlocking...');
-    try {
-      const res = await fetch('/api/fetch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: password }),
-      });
-      const json = await res.json();
-      if (json.error) {
-        setMessage('❌ ' + json.error);
-      } else {
-        setBookmarks(json.data);
-        setIsLoggedIn(true);
-        setMessage('');
-      }
-    } catch (err) {
-      setMessage('Failed to connect.');
-    }
-    setLoading(false);
+    checkLogin(password);
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('MY_POCKET_PASSWORD');
+    setIsLoggedIn(false);
+    setPassword('');
   }
 
   // ---------------------------------------------------------
@@ -119,13 +167,11 @@ export default function Home() {
 
   async function saveEdit(id) {
     const processedTags = formatTags(editTags);
-    
     await fetch('/api/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: id, tags: processedTags, password: password }),
     });
-
     setEditingId(null);
     refreshList();
   }
@@ -147,25 +193,14 @@ export default function Home() {
   }
 
   // ---------------------------------------------------------
-  // 3. SMART FILTER LOGIC (Tags + Search)
+  // 3. TAG CALCULATION
   // ---------------------------------------------------------
   const allTagsRaw = bookmarks.flatMap(item => item.tags ? item.tags.split(',') : []);
   const uniqueTags = [...new Set(allTagsRaw.map(t => t.trim().toLowerCase()))].sort();
 
   const filteredBookmarks = bookmarks.filter(item => {
-    // 1. Check Tag Filter
-    const matchesTag = activeTag ? (item.tags && item.tags.toLowerCase().includes(activeTag.toLowerCase())) : true;
-
-    // 2. Check Search Text (Title, URL, Summary, or Tags)
-    const query = searchQuery.toLowerCase();
-    const matchesSearch = (
-      (item.title && item.title.toLowerCase().includes(query)) ||
-      (item.url && item.url.toLowerCase().includes(query)) ||
-      (item.summary && item.summary.toLowerCase().includes(query)) ||
-      (item.tags && item.tags.toLowerCase().includes(query))
-    );
-
-    return matchesTag && matchesSearch;
+    if (!activeTag) return true;
+    return item.tags && item.tags.toLowerCase().includes(activeTag.toLowerCase());
   });
 
   // ---------------------------------------------------------
@@ -173,7 +208,15 @@ export default function Home() {
   // ---------------------------------------------------------
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', fontFamily: 'sans-serif', padding: '20px' }}>
-      
+      {/* THIS HEAD TAG IS CRITICAL FOR ANDROID 
+         It links the manifest file we just created.
+      */}
+      <Head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#000000" />
+        <title>My Pocket</title>
+      </Head>
+
       {/* LOGIN SCREEN */}
       {!isLoggedIn && (
         <div style={{ height: '80vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -198,7 +241,10 @@ export default function Home() {
       {isLoggedIn && (
         <>
           <div style={{ marginBottom: '30px', textAlign: 'center' }}>
-            <h1 style={{cursor:'pointer'}} onClick={() => window.location.reload()}>My Pocket 🔓</h1>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h1 style={{margin:0, cursor:'pointer'}} onClick={() => window.location.href='/'}>My Pocket 🔓</h1>
+              <button onClick={handleLogout} style={{ background: 'none', border: '1px solid #ccc', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Logout</button>
+            </div>
             
             {/* ADD FORM */}
             <div style={{ backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '8px', maxWidth: '800px', margin: '0 auto 20px auto', border: '1px solid #eee' }}>
@@ -209,17 +255,6 @@ export default function Home() {
               </form>
               {message && <p style={{ color: message.includes('❌') ? 'red' : 'green', marginTop: '10px', fontWeight: 'bold' }}>{message}</p>}
             </div>
-          </div>
-
-          {/* SEARCH BAR (NEW) */}
-          <div style={{ marginBottom: '15px', maxWidth: '800px', margin: '0 auto 15px auto' }}>
-            <input 
-              type="text" 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="🔍 Search titles, summaries, or tags..." 
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '16px' }}
-            />
           </div>
 
           {/* DYNAMIC TAG BAR */}
@@ -271,18 +306,10 @@ export default function Home() {
                         {item.tags && item.tags.split(',').map(t => (
                           <span key={t} style={{ backgroundColor: '#f0f0f0', padding: '3px 8px', borderRadius: '4px', fontSize: '12px', color: '#555' }}>#{t.trim()}</span>
                         ))}
-                        {/* Always visible grey pencil */}
                         <button 
                           onClick={() => startEditing(item)}
                           title="Edit Tags"
-                          style={{ 
-                            background: 'none', 
-                            border: 'none', 
-                            cursor: 'pointer', 
-                            fontSize: '16px', 
-                            color: '#888', 
-                            padding: '0 5px'
-                          }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#888', padding: '0 5px' }}
                         >
                           ✎
                         </button>
