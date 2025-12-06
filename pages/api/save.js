@@ -9,19 +9,22 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Only POST allowed');
 
-  // We now accept 'tags' from the frontend
-  const { link, tags } = req.body;
+  const { link, tags, password } = req.body; // <--- We now accept 'password'
+
+  // 1. SECURITY CHECK
+  if (password !== process.env.ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Wrong password!' });
+  }
 
   try {
     const response = await fetch(link);
     const html = await response.text();
     const $ = cheerio.load(html);
-    
+
     const title = $('meta[property="og:title"]').attr('content') || $('title').text();
     const image = $('meta[property="og:image"]').attr('content');
     const summary = $('meta[property="og:description"]').attr('content');
 
-    // Save to Supabase with the new 'tags' field
     const { data, error } = await supabase
       .from('bookmarks')
       .insert([{ url: link, title, image, summary, tags }]);
