@@ -8,10 +8,12 @@ export default function Home() {
   // Form States
   const [url, setUrl] = useState('');
   const [tags, setTags] = useState('');
+  const [activeTag, setActiveTag] = useState(''); 
   
-  // Filter States
-  const [activeTag, setActiveTag] = useState(''); // The tag button currently clicked
-  
+  // EDITING STATES
+  const [editingId, setEditingId] = useState(null); 
+  const [editTags, setEditTags] = useState('');     
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -34,7 +36,6 @@ export default function Home() {
     setLoading(true);
     setMessage('Unlocking...');
     try {
-      // We try to fetch. If it works, we know the password is right.
       const res = await fetch('/api/fetch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -55,32 +56,41 @@ export default function Home() {
   }
 
   // ---------------------------------------------------------
-  // 2. SAVING & DELETING
+  // 2. SAVING, DELETING & UPDATING
   // ---------------------------------------------------------
+
+  function formatTags(tagString) {
+    if (!tagString) return null;
+    return tagString.split(',')
+      .map(t => t.trim().toLowerCase())
+      .filter(t => t.length > 0)
+      .slice(0, 3)
+      .join(', ');
+  }
 
   async function handleSave(e) {
     e.preventDefault();
     setLoading(true);
     setMessage('Saving...');
 
-    // Rule: Max 3 tags. We process the string here.
-    // 1. Split by comma, 2. Trim whitespace, 3. Take top 3
-    const processedTags = tags.split(',')
-      .map(t => t.trim().toLowerCase()) // clean up spaces and casing
-      .filter(t => t.length > 0)        // remove empty
-      .slice(0, 3)                      // Keep only first 3
-      .join(', ');                      // Join back to string
+    const processedTags = formatTags(tags);
 
-    await fetch('/api/save', {
+    const res = await fetch('/api/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ link: url, tags: processedTags, password: password }),
     });
     
-    setMessage('Saved!');
-    setUrl('');
-    setTags('');
-    refreshList(); 
+    const json = await res.json();
+    
+    if (json.error) {
+      setMessage('❌ ' + json.error);
+    } else {
+      setMessage('Saved!');
+      setUrl('');
+      setTags('');
+      refreshList(); 
+    }
     setLoading(false);
   }
 
@@ -94,46 +104,55 @@ export default function Home() {
     refreshList();
   }
 
+  function startEditing(item) {
+    setEditingId(item.id);
+    setEditTags(item.tags || ''); 
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setEditTags('');
+  }
+
+  async function saveEdit(id) {
+    const processedTags = formatTags(editTags);
+    
+    await fetch('/api/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id, tags: processedTags, password: password }),
+    });
+
+    setEditingId(null);
+    refreshList();
+  }
+
   async function handleDeleteCategory() {
     if (!activeTag) return;
-    
-    // Find all IDs that are currently visible
     const idsToDelete = filteredBookmarks.map(b => b.id);
-    const count = idsToDelete.length;
-
-    // Safety Warning
-    const userConfirmed = confirm(
-      `WARNING: This will delete ALL ${count} bookmarks tagged "${activeTag}".\n\nAre you sure?`
-    );
-
-    if (!userConfirmed) return;
+    if (!confirm(`WARNING: This will delete ALL ${idsToDelete.length} bookmarks tagged "${activeTag}".\n\nAre you sure?`)) return;
 
     setLoading(true);
-    const res = await fetch('/api/delete_batch', {
+    await fetch('/api/delete_batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: idsToDelete, password: password }),
     });
-    
     setLoading(false);
-    setActiveTag(''); // Reset filter
-    refreshList();    // Refresh data
+    setActiveTag('');
+    refreshList();
   }
 
   // ---------------------------------------------------------
   // 3. TAG CALCULATION
   // ---------------------------------------------------------
-
-  // Extract every unique tag from your list
   const allTagsRaw = bookmarks.flatMap(item => item.tags ? item.tags.split(',') : []);
   const uniqueTags = [...new Set(allTagsRaw.map(t => t.trim().toLowerCase()))].sort();
 
-  // Filter the main list based on which button is clicked
   const filteredBookmarks = bookmarks.filter(item => {
-    if (!activeTag) return true; // No filter? Show all.
+    if (!activeTag) return true;
     return item.tags && item.tags.toLowerCase().includes(activeTag.toLowerCase());
   });
-
 
   // ---------------------------------------------------------
   // 4. THE UI
@@ -170,80 +189,27 @@ export default function Home() {
             {/* ADD FORM */}
             <div style={{ backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '8px', maxWidth: '800px', margin: '0 auto 20px auto', border: '1px solid #eee' }}>
               <form onSubmit={handleSave} style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <input 
-                  type="url" 
-                  value={url} 
-                  onChange={(e) => setUrl(e.target.value)} 
-                  placeholder="Paste link..." 
-                  required 
-                  style={{ flex: 2, minWidth: '200px', padding: '12px', borderRadius: '5px', border: '1px solid #ccc' }}
-                />
-                <input 
-                  type="text" 
-                  value={tags} 
-                  onChange={(e) => setTags(e.target.value)} 
-                  placeholder="Tags (max 3, comma separated)" 
-                  style={{ flex: 1, minWidth: '150px', padding: '12px', borderRadius: '5px', border: '1px solid #ccc' }}
-                />
-                <button disabled={loading} style={{ padding: '12px 25px', backgroundColor: 'black', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-                  {loading ? '...' : 'Save'}
-                </button>
+                <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste link..." required style={{ flex: 2, minWidth: '200px', padding: '12px', borderRadius: '5px', border: '1px solid #ccc' }} />
+                <input type="text" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="Tags (max 3)" style={{ flex: 1, minWidth: '150px', padding: '12px', borderRadius: '5px', border: '1px solid #ccc' }} />
+                <button disabled={loading} style={{ padding: '12px 25px', backgroundColor: 'black', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>{loading ? '...' : 'Save'}</button>
               </form>
+              {message && <p style={{ color: message.includes('❌') ? 'red' : 'green', marginTop: '10px', fontWeight: 'bold' }}>{message}</p>}
             </div>
           </div>
 
-          {/* DYNAMIC TAG BAR (Horizontal Scroll) */}
-          <div style={{ 
-            display: 'flex', 
-            gap: '10px', 
-            overflowX: 'auto', 
-            paddingBottom: '15px', 
-            marginBottom: '20px', 
-            borderBottom: '1px solid #eee',
-            whiteSpace: 'nowrap'
-          }}>
-            <button 
-              onClick={() => setActiveTag('')}
-              style={{ 
-                padding: '8px 16px', 
-                borderRadius: '20px', 
-                border: 'none', 
-                cursor: 'pointer',
-                backgroundColor: activeTag === '' ? 'black' : '#e0e0e0',
-                color: activeTag === '' ? 'white' : 'black',
-                fontWeight: 'bold'
-              }}
-            >
-              All
-            </button>
+          {/* DYNAMIC TAG BAR */}
+          <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '20px', borderBottom: '1px solid #eee', whiteSpace: 'nowrap' }}>
+            <button onClick={() => setActiveTag('')} style={{ padding: '8px 16px', borderRadius: '20px', border: 'none', cursor: 'pointer', backgroundColor: activeTag === '' ? 'black' : '#e0e0e0', color: activeTag === '' ? 'white' : 'black', fontWeight: 'bold' }}>All</button>
             {uniqueTags.map(tag => (
-               <button 
-               key={tag}
-               onClick={() => setActiveTag(tag)}
-               style={{ 
-                 padding: '8px 16px', 
-                 borderRadius: '20px', 
-                 border: 'none', 
-                 cursor: 'pointer',
-                 backgroundColor: activeTag === tag ? 'black' : '#f0f0f0',
-                 color: activeTag === tag ? 'white' : 'black',
-                 textTransform: 'capitalize'
-               }}
-             >
-               {tag}
-             </button>
+               <button key={tag} onClick={() => setActiveTag(tag)} style={{ padding: '8px 16px', borderRadius: '20px', border: 'none', cursor: 'pointer', backgroundColor: activeTag === tag ? 'black' : '#f0f0f0', color: activeTag === tag ? 'white' : 'black', textTransform: 'capitalize' }}>{tag}</button>
             ))}
           </div>
 
-          {/* CATEGORY DELETE BUTTON (Only shows when a filter is active) */}
+          {/* CATEGORY DELETE */}
           {activeTag && filteredBookmarks.length > 0 && (
              <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff0f0', padding: '10px 15px', borderRadius: '8px', border: '1px solid #ffcccc' }}>
                 <span style={{ color: '#d00000'}}>Showing {filteredBookmarks.length} items in <b>#{activeTag}</b></span>
-                <button 
-                  onClick={handleDeleteCategory}
-                  style={{ backgroundColor: '#d00000', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' }}>
-                  Delete All in #{activeTag}
-                </button>
+                <button onClick={handleDeleteCategory} style={{ backgroundColor: '#d00000', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' }}>Delete All in #{activeTag}</button>
              </div>
           )}
 
@@ -254,17 +220,53 @@ export default function Home() {
                 <div style={{ height: '180px', backgroundColor: '#f0f0f0', overflow: 'hidden' }}>
                   {item.image ? <img src={item.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
                 </div>
+                
                 <div style={{ padding: '15px', flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <h3 style={{ fontSize: '18px', margin: '0 0 8px 0' }}><a href={item.url} target="_blank" style={{ textDecoration: 'none', color: '#333' }}>{item.title || 'Untitled'}</a></h3>
                     
-                    {/* Render Tags as little pills */}
-                    {item.tags && (
-                      <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                        {item.tags.split(',').map(t => (
-                          <span key={t} style={{ backgroundColor: '#f0f0f0', padding: '3px 8px', borderRadius: '4px', fontSize: '12px', color: '#555' }}>
-                            #{t.trim()}
-                          </span>
+                    {/* EDIT MODE */}
+                    {editingId === item.id ? (
+                      <div style={{ marginBottom: '10px' }}>
+                        <input 
+                          type="text" 
+                          value={editTags} 
+                          onChange={(e) => setEditTags(e.target.value)}
+                          placeholder="tech, news..."
+                          autoFocus
+                          style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #333', marginBottom: '5px' }}
+                        />
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                          <button onClick={() => saveEdit(item.id)} style={{ flex: 1, padding: '5px', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>Save</button>
+                          <button onClick={cancelEditing} style={{ flex: 1, padding: '5px', backgroundColor: '#ccc', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                    /* VIEW MODE - SUBTLE PENCIL */
+                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '5px', marginBottom: '10px', minHeight: '24px' }}>
+                        
+                        {/* Render Tags if they exist */}
+                        {item.tags && item.tags.split(',').map(t => (
+                          <span key={t} style={{ backgroundColor: '#f0f0f0', padding: '3px 8px', borderRadius: '4px', fontSize: '12px', color: '#555' }}>#{t.trim()}</span>
                         ))}
+                        
+                        {/* Subtle Edit Button - Always visible, even if no tags */}
+                        <button 
+                          onClick={() => startEditing(item)}
+                          title="Edit Tags"
+                          style={{ 
+                            background: 'none', 
+                            border: 'none', 
+                            cursor: 'pointer', 
+                            fontSize: '16px', 
+                            color: '#e0e0e0', // Very light grey (invisible until hover)
+                            padding: '0 5px',
+                            transition: 'color 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.target.style.color = '#555'} // Darker on hover
+                          onMouseLeave={(e) => e.target.style.color = '#e0e0e0'}
+                        >
+                          ✎
+                        </button>
                       </div>
                     )}
 
