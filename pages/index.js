@@ -8,7 +8,10 @@ export default function Home() {
   // Form States
   const [url, setUrl] = useState('');
   const [tags, setTags] = useState('');
+  
+  // Filter States
   const [activeTag, setActiveTag] = useState(''); 
+  const [searchQuery, setSearchQuery] = useState(''); // <--- NEW: Search State
   
   // EDITING STATES
   const [editingId, setEditingId] = useState(null); 
@@ -144,14 +147,25 @@ export default function Home() {
   }
 
   // ---------------------------------------------------------
-  // 3. TAG CALCULATION
+  // 3. SMART FILTER LOGIC (Tags + Search)
   // ---------------------------------------------------------
   const allTagsRaw = bookmarks.flatMap(item => item.tags ? item.tags.split(',') : []);
   const uniqueTags = [...new Set(allTagsRaw.map(t => t.trim().toLowerCase()))].sort();
 
   const filteredBookmarks = bookmarks.filter(item => {
-    if (!activeTag) return true;
-    return item.tags && item.tags.toLowerCase().includes(activeTag.toLowerCase());
+    // 1. Check Tag Filter
+    const matchesTag = activeTag ? (item.tags && item.tags.toLowerCase().includes(activeTag.toLowerCase())) : true;
+
+    // 2. Check Search Text (Title, URL, Summary, or Tags)
+    const query = searchQuery.toLowerCase();
+    const matchesSearch = (
+      (item.title && item.title.toLowerCase().includes(query)) ||
+      (item.url && item.url.toLowerCase().includes(query)) ||
+      (item.summary && item.summary.toLowerCase().includes(query)) ||
+      (item.tags && item.tags.toLowerCase().includes(query))
+    );
+
+    return matchesTag && matchesSearch;
   });
 
   // ---------------------------------------------------------
@@ -195,6 +209,17 @@ export default function Home() {
               </form>
               {message && <p style={{ color: message.includes('❌') ? 'red' : 'green', marginTop: '10px', fontWeight: 'bold' }}>{message}</p>}
             </div>
+          </div>
+
+          {/* SEARCH BAR (NEW) */}
+          <div style={{ marginBottom: '15px', maxWidth: '800px', margin: '0 auto 15px auto' }}>
+            <input 
+              type="text" 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="🔍 Search titles, summaries, or tags..." 
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '16px' }}
+            />
           </div>
 
           {/* DYNAMIC TAG BAR */}
@@ -241,7 +266,7 @@ export default function Home() {
                         </div>
                       </div>
                     ) : (
-                    /* VIEW MODE - VISIBLE PENCIL */
+                    /* VIEW MODE */
                       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '5px', marginBottom: '10px', minHeight: '24px' }}>
                         {item.tags && item.tags.split(',').map(t => (
                           <span key={t} style={{ backgroundColor: '#f0f0f0', padding: '3px 8px', borderRadius: '4px', fontSize: '12px', color: '#555' }}>#{t.trim()}</span>
@@ -255,7 +280,7 @@ export default function Home() {
                             border: 'none', 
                             cursor: 'pointer', 
                             fontSize: '16px', 
-                            color: '#888', // VISIBLE GREY
+                            color: '#888', 
                             padding: '0 5px'
                           }}
                         >
