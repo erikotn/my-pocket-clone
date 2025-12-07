@@ -14,6 +14,10 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
+  // EDITING STATES (Restored)
+  const [editingId, setEditingId] = useState(null);
+  const [editTags, setEditTags] = useState('');
+
   // 1. INITIALIZATION & LOGIN
   useEffect(() => {
     const savedPass = localStorage.getItem('MY_POCKET_PASS');
@@ -28,7 +32,6 @@ export default function Home() {
     const passToUse = passOverride || password;
     
     try {
-      // We use the secure fetcher
       const res = await fetch('/api/fetch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -55,12 +58,7 @@ export default function Home() {
     setLoading(true);
     setMessage('Saving...');
 
-    // Process tags: clean up and limit to 3
-    const processedTags = tags.split(',')
-      .map(t => t.trim().toLowerCase())
-      .filter(t => t.length > 0)
-      .slice(0, 3)
-      .join(', ');
+    const processedTags = processTags(tags);
 
     try {
       const res = await fetch('/api/save', {
@@ -77,7 +75,7 @@ export default function Home() {
         setMessage('Saved!');
         setUrl('');
         setTags('');
-        handleLogin(null, password); // Refresh list
+        handleLogin(null, password); 
       }
     } catch (err) {
       setMessage('Failed to save.');
@@ -95,37 +93,53 @@ export default function Home() {
       body: JSON.stringify({ id: id, password: password }),
     });
 
-    handleLogin(null, password); // Refresh
+    handleLogin(null, password); 
   }
 
-  // --- NEW FEATURE: TOGGLE EXISTING TAGS ---
-  function toggleTag(tagToToggle) {
-    // 1. Get current tags as an array
-    let currentTags = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
+  // 4. EDIT FUNCTIONS (Restored)
+  function startEditing(item) {
+    setEditingId(item.id);
+    setEditTags(item.tags || '');
+  }
+
+  async function saveEdit(id) {
+    const processedTags = processTags(editTags);
     
-    // 2. Check if tag is already there
+    // Assumes pages/api/update.js exists (we created it earlier)
+    await fetch('/api/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id, tags: processedTags, password: password }),
+    });
+
+    setEditingId(null);
+    handleLogin(null, password);
+  }
+
+  // Helper
+  function processTags(str) {
+    return str.split(',')
+      .map(t => t.trim().toLowerCase())
+      .filter(t => t.length > 0)
+      .slice(0, 3)
+      .join(', ');
+  }
+
+  function toggleTag(tagToToggle) {
+    let currentTags = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
     if (currentTags.includes(tagToToggle)) {
-      // Remove it
       currentTags = currentTags.filter(t => t !== tagToToggle);
     } else {
-      // Add it (if under limit)
-      if (currentTags.length >= 3) {
-        alert("Max 3 tags allowed.");
-        return;
-      }
+      if (currentTags.length >= 3) { alert("Max 3 tags allowed."); return; }
       currentTags.push(tagToToggle);
     }
-    
-    // 3. Update state string
     setTags(currentTags.join(', '));
   }
 
   // --- DATA PROCESSING ---
-  // Get all unique tags from your history to show in the "Cloud"
   const allTagsRaw = bookmarks.flatMap(item => item.tags ? item.tags.split(',') : []);
   const uniqueTags = [...new Set(allTagsRaw.map(t => t.trim().toLowerCase()))].sort();
 
-  // Filter list based on top bar selection
   const filteredBookmarks = bookmarks.filter(item => {
     if (!activeTag) return true;
     return item.tags && item.tags.toLowerCase().includes(activeTag.toLowerCase());
@@ -174,7 +188,7 @@ export default function Home() {
             </button>
           </form>
 
-          {/* NEW: CLICKABLE TAG CLOUD FOR INPUT */}
+          {/* TAG CLOUD (Click to Add) */}
           {uniqueTags.length > 0 && (
             <div style={{marginTop: '15px', display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center'}}>
               <span style={{fontSize: '12px', color: '#888', alignSelf: 'center'}}>Quick Add:</span>
@@ -235,14 +249,29 @@ export default function Home() {
                   <a href={item.url} target="_blank" style={{ textDecoration: 'none', color: '#333' }}>{item.title || 'Untitled'}</a>
                 </h3>
                 
-                {/* Tags on Card */}
-                {item.tags && (
-                  <div style={{ marginBottom: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                    {item.tags.split(',').map(t => (
+                {/* EDIT MODE */}
+                {editingId === item.id ? (
+                  <div style={{marginBottom:'10px'}}>
+                    <input 
+                      value={editTags} 
+                      onChange={e => setEditTags(e.target.value)} 
+                      style={{width:'100%', padding:'5px', border:'1px solid black', borderRadius:'4px', marginBottom:'5px'}} 
+                    />
+                    <div style={{display:'flex', gap:'5px'}}>
+                      <button onClick={() => saveEdit(item.id)} style={{flex:1, background:'green', color:'white', border:'none', padding:'5px', borderRadius:'3px', cursor:'pointer'}}>Save</button>
+                      <button onClick={() => setEditingId(null)} style={{flex:1, background:'#ccc', border:'none', padding:'5px', borderRadius:'3px', cursor:'pointer'}}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  /* VIEW MODE */
+                  <div style={{ marginBottom: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap', alignItems:'center' }}>
+                    {item.tags && item.tags.split(',').map(t => (
                       <span key={t} style={{ backgroundColor: '#f0f0f0', padding: '3px 8px', borderRadius: '4px', fontSize: '12px', color: '#555' }}>
                         #{t.trim()}
                       </span>
                     ))}
+                    {/* The Restored Pencil Button */}
+                    <button onClick={() => startEditing(item)} style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#999'}}>✎</button>
                   </div>
                 )}
                 
