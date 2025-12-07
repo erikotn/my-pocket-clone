@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router'; // <--- 1. Import Router
 
 export default function Home() {
+  const router = useRouter(); // <--- 2. Initialize Router
+
   const [password, setPassword] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [bookmarks, setBookmarks] = useState([]);
@@ -14,7 +17,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  // EDITING STATES (Restored)
+  // EDITING STATES
   const [editingId, setEditingId] = useState(null);
   const [editTags, setEditTags] = useState('');
 
@@ -26,6 +29,25 @@ export default function Home() {
       handleLogin(null, savedPass);
     }
   }, []);
+
+  // 2. ANDROID SHARE LISTENER (RESTORED)
+  useEffect(() => {
+    if (!router.isReady) return;
+    
+    // Android sends 'text' (usually the URL) or 'title'
+    const { text, title, link } = router.query;
+    const sharedUrl = text || link; 
+
+    if (sharedUrl) {
+      // Extract URL if Android sends extra text like "Check this out: https://..."
+      const urlMatch = sharedUrl.match(/(https?:\/\/[^\s]+)/);
+      if (urlMatch) {
+        setUrl(urlMatch[0]);
+      } else {
+        setUrl(sharedUrl);
+      }
+    }
+  }, [router.isReady, router.query]);
 
   async function handleLogin(e, passOverride) {
     if (e) e.preventDefault();
@@ -52,7 +74,7 @@ export default function Home() {
     }
   }
 
-  // 2. SAVE FUNCTION
+  // 3. SAVE FUNCTION
   async function handleSave(e) {
     e.preventDefault();
     setLoading(true);
@@ -83,7 +105,7 @@ export default function Home() {
     setLoading(false);
   }
 
-  // 3. DELETE FUNCTION
+  // 4. DELETE FUNCTION
   async function handleDelete(id) {
     if (!confirm('Delete this bookmark?')) return;
     
@@ -96,7 +118,7 @@ export default function Home() {
     handleLogin(null, password); 
   }
 
-  // 4. EDIT FUNCTIONS (Restored)
+  // 5. EDIT FUNCTIONS
   function startEditing(item) {
     setEditingId(item.id);
     setEditTags(item.tags || '');
@@ -105,7 +127,6 @@ export default function Home() {
   async function saveEdit(id) {
     const processedTags = processTags(editTags);
     
-    // Assumes pages/api/update.js exists (we created it earlier)
     await fetch('/api/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -116,7 +137,7 @@ export default function Home() {
     handleLogin(null, password);
   }
 
-  // Helper
+  // Helpers
   function processTags(str) {
     return str.split(',')
       .map(t => t.trim().toLowerCase())
@@ -270,7 +291,7 @@ export default function Home() {
                         #{t.trim()}
                       </span>
                     ))}
-                    {/* The Restored Pencil Button */}
+                    {/* The Edit Pencil */}
                     <button onClick={() => startEditing(item)} style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#999'}}>✎</button>
                   </div>
                 )}
