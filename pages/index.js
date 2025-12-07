@@ -1,329 +1,264 @@
 import { useState, useEffect } from 'react';
-import Head from 'next/head';
-import { useRouter } from 'next/router';
 
-export default function Home() {
-  const router = useRouter();
-  
+export default function AdVault() {
   const [password, setPassword] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [bookmarks, setBookmarks] = useState([]);
+  const [campaigns, setCampaigns] = useState([]);
   
-  // Form States
-  const [url, setUrl] = useState('');
-  const [tags, setTags] = useState('');
+  // View States
+  const [view, setView] = useState('gallery'); // 'gallery', 'add', 'detail'
+  const [activeCampaign, setActiveCampaign] = useState(null); 
+  
   const [activeTag, setActiveTag] = useState(''); 
-  
-  // EDITING STATES
-  const [editingId, setEditingId] = useState(null); 
-  const [editTags, setEditTags] = useState('');     
+  const [url, setUrl] = useState('');
+  const [userTags, setUserTags] = useState(''); 
+  const [step, setStep] = useState('input'); 
+  const [analysis, setAnalysis] = useState(null);
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [loadingMsg, setLoadingMsg] = useState('');
 
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
+  // Edit State
+  const [editingId, setEditingId] = useState(null);
+  const [editTags, setEditTags] = useState('');
 
-  // ---------------------------------------------------------
-  // 0. INITIALIZATION (Login Check & Share Catching)
-  // ---------------------------------------------------------
-  
+  // 1. INITIALIZATION
   useEffect(() => {
-    // A. Check if password is saved in LocalStorage
-    const savedPassword = localStorage.getItem('MY_POCKET_PASSWORD');
-    if (savedPassword) {
-      setPassword(savedPassword);
-      checkLogin(savedPassword);
-    }
+    const savedPass = localStorage.getItem('ADVAULT_PASS');
+    if (savedPass) { setPassword(savedPass); handleLogin(null, savedPass); }
   }, []);
 
-  useEffect(() => {
-    // B. Check if Android shared a link with us
-    if (!router.isReady) return;
-    
-    // Android sends 'text' (usually the URL) or 'title'
-    const { text, title, link } = router.query;
-    const sharedUrl = text || link; // 'text' is the most common for shared URLs
-
-    if (sharedUrl) {
-      // Sometimes Android shares "Check this out: https://url..." 
-      // We extract just the URL part if possible
-      const urlMatch = sharedUrl.match(/(https?:\/\/[^\s]+)/);
-      if (urlMatch) {
-        setUrl(urlMatch[0]);
-      } else {
-        setUrl(sharedUrl);
-      }
-    }
-  }, [router.isReady, router.query]);
-
-  // ---------------------------------------------------------
-  // 1. DATA LOGIC
-  // ---------------------------------------------------------
-
-  async function checkLogin(passToUse) {
-    setLoading(true);
+  async function handleLogin(e, passOverride) {
+    if (e) e.preventDefault();
+    const passToUse = passOverride || password;
     try {
-      const res = await fetch('/api/fetch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: passToUse }),
-      });
+      const res = await fetch('/api/fetch', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ password: passToUse }) });
       const json = await res.json();
-      if (json.error) {
-        // Only clear if user manually typed it, otherwise silent fail
-        if (!localStorage.getItem('MY_POCKET_PASSWORD')) setMessage('❌ ' + json.error);
-      } else {
-        setBookmarks(json.data);
-        setIsLoggedIn(true);
-        // SAVE PASSWORD TO PHONE so you stay logged in
-        localStorage.setItem('MY_POCKET_PASSWORD', passToUse);
-        setMessage('');
-      }
-    } catch (err) {
-      console.error(err);
-    }
-    setLoading(false);
+      if (!json.error) { setCampaigns(json.data || []); setIsLoggedIn(true); localStorage.setItem('ADVAULT_PASS', passToUse); }
+    } catch (err) {}
   }
 
-  async function refreshList() {
-    // Use the state password
-    const res = await fetch('/api/fetch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: password }),
-    });
-    const json = await res.json();
-    if (json.data) setBookmarks(json.data);
+  async function handleAnalyze(e) {
+    e.preventDefault(); setStep('loading'); setLoadingMsg("🕵️‍♂️ Creative Director is analyzing...");
+    try {
+      const res = await fetch('/api/analyze', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ url, password }) });
+      const json = await res.json();
+      if (json.error) { alert(json.error); setStep('input'); } 
+      else { setAnalysis(json.strategy); if (json.images.length > 0) setSelectedImages([json.images[0]]); window.tempImages = json.images; setStep('review'); }
+    } catch (err) { alert("Analysis failed"); setStep('input'); }
   }
 
-  async function handleLogin(e) {
-    e.preventDefault();
-    setMessage('Unlocking...');
-    checkLogin(password);
-  }
-
-  function handleLogout() {
-    localStorage.removeItem('MY_POCKET_PASSWORD');
-    setIsLoggedIn(false);
-    setPassword('');
-  }
-
-  // ---------------------------------------------------------
-  // 2. SAVING, DELETING & UPDATING
-  // ---------------------------------------------------------
-
-  function formatTags(tagString) {
-    if (!tagString) return null;
-    return tagString.split(',')
-      .map(t => t.trim().toLowerCase())
-      .filter(t => t.length > 0)
-      .slice(0, 3)
-      .join(', ');
-  }
-
-  async function handleSave(e) {
-    e.preventDefault();
-    setLoading(true);
-    setMessage('Saving...');
-
-    const processedTags = formatTags(tags);
-
-    const res = await fetch('/api/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ link: url, tags: processedTags, password: password }),
-    });
-    
-    const json = await res.json();
-    
-    if (json.error) {
-      setMessage('❌ ' + json.error);
-    } else {
-      setMessage('Saved!');
-      setUrl('');
-      setTags('');
-      refreshList(); 
-    }
-    setLoading(false);
+  async function handleSave() {
+    const processedTags = processTags(userTags);
+    const finalData = { ...analysis, tags: processedTags, source_url: url, image_urls: selectedImages };
+    const res = await fetch('/api/save', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ data: finalData, password }) });
+    if (res.ok) { handleLogin(null, password); setView('gallery'); setStep('input'); setUrl(''); setUserTags(''); setAnalysis(null); }
   }
 
   async function handleDelete(id) {
-    if (!confirm('Delete this bookmark?')) return;
-    await fetch('/api/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: id, password: password }),
-    });
-    refreshList();
+    if (!confirm("Delete this campaign?")) return;
+    const res = await fetch('/api/delete', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id, password }) });
+    if (res.ok) { handleLogin(null, password); if(view === 'detail') setView('gallery'); }
   }
 
-  function startEditing(item) {
-    setEditingId(item.id);
-    setEditTags(item.tags || ''); 
-  }
-
-  function cancelEditing() {
-    setEditingId(null);
-    setEditTags('');
-  }
-
+  function startEditing(camp) { setEditingId(camp.id); setEditTags(camp.tags || ''); }
   async function saveEdit(id) {
-    const processedTags = formatTags(editTags);
-    await fetch('/api/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: id, tags: processedTags, password: password }),
-    });
-    setEditingId(null);
-    refreshList();
+    const processedTags = processTags(editTags);
+    const res = await fetch('/api/update', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id, tags: processedTags, password }) });
+    if (res.ok) { setEditingId(null); handleLogin(null, password); }
   }
 
-  async function handleDeleteCategory() {
-    if (!activeTag) return;
-    const idsToDelete = filteredBookmarks.map(b => b.id);
-    if (!confirm(`WARNING: This will delete ALL ${idsToDelete.length} bookmarks tagged "${activeTag}".\n\nAre you sure?`)) return;
+  function processTags(str) { return str.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0).slice(0, 3).join(', '); }
+  function toggleImage(img) { if (selectedImages.includes(img)) setSelectedImages(selectedImages.filter(i => i !== img)); else setSelectedImages([...selectedImages, img]); }
 
-    setLoading(true);
-    await fetch('/api/delete_batch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: idsToDelete, password: password }),
-    });
-    setLoading(false);
-    setActiveTag('');
-    refreshList();
+  function openDetail(camp) { setActiveCampaign(camp); setView('detail'); }
+
+  // --- NEW FEATURE: TOGGLE TAGS FROM LIST ---
+  function toggleUserTag(tag) {
+    const current = userTags.split(',').map(t => t.trim()).filter(t => t.length > 0);
+    
+    if (current.includes(tag)) {
+      // Remove tag
+      setUserTags(current.filter(t => t !== tag).join(', '));
+    } else {
+      // Add tag (Check Max 3)
+      if (current.length >= 3) {
+        alert("Max 3 tags allowed.");
+        return;
+      }
+      setUserTags([...current, tag].join(', '));
+    }
   }
 
-  // ---------------------------------------------------------
-  // 3. TAG CALCULATION
-  // ---------------------------------------------------------
-  const allTagsRaw = bookmarks.flatMap(item => item.tags ? item.tags.split(',') : []);
-  const uniqueTags = [...new Set(allTagsRaw.map(t => t.trim().toLowerCase()))].sort();
-
-  const filteredBookmarks = bookmarks.filter(item => {
+  // Filter Logic
+  const allManualTags = campaigns.flatMap(c => c.tags ? c.tags.split(',') : []).map(t => t.trim());
+  const uniqueFilters = [...new Set(allManualTags)].sort();
+  const filteredCampaigns = campaigns.filter(c => {
     if (!activeTag) return true;
-    return item.tags && item.tags.toLowerCase().includes(activeTag.toLowerCase());
+    return c.tags && c.tags.includes(activeTag);
   });
 
-  // ---------------------------------------------------------
-  // 4. THE UI
-  // ---------------------------------------------------------
-  return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', fontFamily: 'sans-serif', padding: '20px' }}>
-      {/* THIS HEAD TAG IS CRITICAL FOR ANDROID 
-         It links the manifest file we just created.
-      */}
-      <Head>
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#000000" />
-        <title>My Pocket</title>
-      </Head>
+  if (!isLoggedIn) return <div style={{height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#111', color:'white'}}><form onSubmit={e => handleLogin(e, null)}><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" style={{padding:'15px', borderRadius:'5px'}} /><button style={{padding:'15px'}}>Unlock</button></form></div>;
 
-      {/* LOGIN SCREEN */}
-      {!isLoggedIn && (
-        <div style={{ height: '80vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <h1>My Secure Pocket</h1>
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '300px' }}>
-            <input 
-              type="password" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter Password..."
-              style={{ padding: '15px', fontSize: '18px', borderRadius: '5px', border: '1px solid #ccc' }}
-            />
-            <button style={{ padding: '15px', fontSize: '18px', backgroundColor: 'black', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-              {loading ? 'Checking...' : 'Unlock'}
-            </button>
-          </form>
-          {message && <p style={{ color: 'red', marginTop: '20px' }}>{message}</p>}
+  return (
+    <div style={{fontFamily: 'sans-serif', background: '#f5f5f5', minHeight: '100vh', paddingBottom:'50px'}}>
+      
+      {/* HEADER */}
+      <div style={{background: 'white', padding: '20px', borderBottom: '1px solid #ddd', position: 'sticky', top: 0, zIndex: 100}}>
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom:'15px'}}>
+          <h2 style={{margin:0, cursor:'pointer'}} onClick={() => {setView('gallery'); setActiveTag('');}}>AdVault 🧠</h2>
+          {view === 'gallery' && <button onClick={() => setView('add')} style={{background: 'black', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '20px', cursor: 'pointer', fontWeight: 'bold'}}>+ Add</button>}
+        </div>
+        {view === 'gallery' && (
+          <div style={{display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '5px', scrollbarWidth:'none'}}>
+            <button onClick={() => setActiveTag('')} style={activeTag === '' ? activePill : pill}>All</button>
+            {uniqueFilters.map(f => <button key={f} onClick={() => setActiveTag(f)} style={activeTag === f ? activePill : pill}>{f}</button>)}
+          </div>
+        )}
+      </div>
+
+      {/* GALLERY VIEW */}
+      {view === 'gallery' && (
+        <div style={{padding: '20px', columnCount: 3, columnGap: '20px'}}>
+          {filteredCampaigns.map(camp => (
+            <div key={camp.id} style={{background: 'white', borderRadius: '10px', marginBottom: '20px', breakInside: 'avoid', overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', position:'relative'}}>
+              {camp.image_urls && camp.image_urls[0] && <img src={camp.image_urls[0]} style={{width: '100%', display: 'block'}} />}
+              <div style={{padding: '15px'}}>
+                <div style={{display:'flex', justifyContent:'space-between'}}>
+                  <div style={{fontSize: '10px', fontWeight: 'bold', color: '#888', textTransform: 'uppercase', marginBottom: '5px'}}>{camp.brand}</div>
+                  <div style={{display: 'flex', gap: '10px'}}>
+                    <button onClick={() => startEditing(camp)} style={{background:'none', border:'none', cursor:'pointer', fontSize:'16px', color:'#ccc'}}>✎</button>
+                    <button onClick={() => handleDelete(camp.id)} style={{background:'none', border:'none', cursor:'pointer', color:'#ccc', fontSize:'18px'}}>×</button>
+                  </div>
+                </div>
+                <h3 style={{margin: '0 0 5px 0', fontSize: '18px'}}>{camp.title || 'Untitled'}</h3>
+                <p style={{fontSize: '13px', color: '#444', lineHeight:'1.4', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>{camp.insight}</p>
+                <button onClick={() => openDetail(camp)} style={{background:'none', border:'none', color:'#0070f3', padding:0, fontSize:'13px', cursor:'pointer', marginBottom:'10px'}}>Read Case Study →</button>
+                {editingId === camp.id ? (
+                  <div><input value={editTags} onChange={e => setEditTags(e.target.value)} style={{width:'100%', padding:'5px'}} /><button onClick={() => saveEdit(camp.id)}>Save</button></div>
+                ) : (
+                  <div style={{display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop:'10px'}}>
+                    {camp.tags && camp.tags.split(',').map((tag, i) => <span key={i} style={{background: '#eee', padding: '3px 8px', borderRadius: '4px', fontSize: '10px', textTransform:'uppercase'}}>{tag}</span>)}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* MAIN APP */}
-      {isLoggedIn && (
-        <>
-          <div style={{ marginBottom: '30px', textAlign: 'center' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h1 style={{margin:0, cursor:'pointer'}} onClick={() => window.location.href='/'}>My Pocket 🔓</h1>
-              <button onClick={handleLogout} style={{ background: 'none', border: '1px solid #ccc', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Logout</button>
-            </div>
-            
-            {/* ADD FORM */}
-            <div style={{ backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '8px', maxWidth: '800px', margin: '0 auto 20px auto', border: '1px solid #eee' }}>
-              <form onSubmit={handleSave} style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste link..." required style={{ flex: 2, minWidth: '200px', padding: '12px', borderRadius: '5px', border: '1px solid #ccc' }} />
-                <input type="text" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="Tags (max 3)" style={{ flex: 1, minWidth: '150px', padding: '12px', borderRadius: '5px', border: '1px solid #ccc' }} />
-                <button disabled={loading} style={{ padding: '12px 25px', backgroundColor: 'black', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>{loading ? '...' : 'Save'}</button>
-              </form>
-              {message && <p style={{ color: message.includes('❌') ? 'red' : 'green', marginTop: '10px', fontWeight: 'bold' }}>{message}</p>}
+      {/* DETAIL MODAL (Classic Layout) */}
+      {view === 'detail' && activeCampaign && (
+        <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.9)', zIndex:9999, overflowY:'auto', padding:'40px 0'}}>
+          <div style={{maxWidth: '800px', margin: '0 auto', background: 'white', borderRadius: '15px', overflow:'hidden', minHeight:'90vh', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', position:'relative'}}>
+            <button onClick={() => setView('gallery')} style={{position: 'absolute', top: '20px', right: '20px', zIndex: 10, background: '#eee', color: 'black', border: 'none', borderRadius: '50%', width: '40px', height: '40px', cursor: 'pointer', fontSize: '20px'}}>✕</button>
+            <div style={{padding: '50px 40px'}}>
+               <div style={{textAlign: 'center', marginBottom: '40px'}}>
+                 <div style={{fontSize: '14px', fontWeight: 'bold', color: '#888', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '15px'}}>{activeCampaign.brand} • {activeCampaign.year}</div>
+                 <h1 style={{margin: '0 0 20px 0', fontSize: '48px', lineHeight:'1.1', fontWeight:'800', letterSpacing:'-1px'}}>{activeCampaign.title}</h1>
+                 {activeCampaign.slogan && <div style={{fontSize: '24px', fontStyle: 'italic', fontFamily:'serif', color: '#111', marginBottom:'15px'}}>"{activeCampaign.slogan}"</div>}
+                 <div style={{display:'flex', justifyContent:'center', flexWrap:'wrap', gap:'25px', fontSize:'12px', letterSpacing:'1px', marginBottom:'25px', borderTop:'1px solid #eee', borderBottom:'1px solid #eee', padding:'20px 0'}}>
+                    <div style={{textAlign:'center'}}><span style={{display:'block', color:'#999', fontWeight:'bold', marginBottom:'5px'}}>AGENCY</span>{activeCampaign.agency || 'N/A'}</div>
+                    <div style={{textAlign:'center'}}><span style={{display:'block', color:'#999', fontWeight:'bold', marginBottom:'5px'}}>SECTOR</span>{activeCampaign.sector || 'N/A'}</div>
+                    <div style={{textAlign:'center'}}><span style={{display:'block', color:'#999', fontWeight:'bold', marginBottom:'5px'}}>ARCHETYPE</span>{activeCampaign.archetype || 'N/A'}</div>
+                    <div style={{textAlign:'center'}}><span style={{display:'block', color:'#999', fontWeight:'bold', marginBottom:'5px'}}>MEDIUM</span>{activeCampaign.format || 'N/A'}</div>
+                 </div>
+                 {activeCampaign.brand_url && <a href={activeCampaign.brand_url} target="_blank" style={{color: '#0070f3', textDecoration: 'none', fontSize: '14px', fontWeight:'bold'}}>Visit Official Site →</a>}
+               </div>
+               <div style={{background: '#f8f8f8', padding: '30px', borderRadius: '12px', marginBottom: '50px', borderLeft:'6px solid #000'}}>
+                 <h4 style={{margin: '0 0 10px 0', textTransform: 'uppercase', fontSize: '12px', color: '#888', letterSpacing:'1px'}}>The Strategic Insight</h4>
+                 <p style={{fontSize: '22px', lineHeight: '1.5', margin: 0, fontWeight: '500'}}>"{activeCampaign.insight}"</p>
+               </div>
+               <div style={{marginBottom: '50px'}}>
+                 <h3 style={{marginBottom: '20px', textTransform:'uppercase', fontSize:'14px', letterSpacing:'1px', borderBottom:'2px solid black', display:'inline-block', paddingBottom:'5px'}}>Creative Analysis</h3>
+                 <div style={{fontSize: '18px', lineHeight: '1.8', color: '#333', whiteSpace: 'pre-wrap'}}>{activeCampaign.analysis || activeCampaign.summary}</div>
+               </div>
+               {activeCampaign.image_urls && activeCampaign.image_urls.length > 0 && (
+                 <div>
+                   <h3 style={{marginBottom: '20px', textTransform:'uppercase', fontSize:'14px', letterSpacing:'1px', borderBottom:'2px solid black', display:'inline-block', paddingBottom:'5px'}}>Campaign Assets</h3>
+                   <div style={{display: 'flex', flexDirection: 'column', gap: '20px'}}>
+                     {activeCampaign.image_urls.map((img, i) => <img key={i} src={img} style={{width: '100%', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)'}} />)}
+                   </div>
+                 </div>
+               )}
             </div>
           </div>
+        </div>
+      )}
 
-          {/* DYNAMIC TAG BAR */}
-          <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '20px', borderBottom: '1px solid #eee', whiteSpace: 'nowrap' }}>
-            <button onClick={() => setActiveTag('')} style={{ padding: '8px 16px', borderRadius: '20px', border: 'none', cursor: 'pointer', backgroundColor: activeTag === '' ? 'black' : '#e0e0e0', color: activeTag === '' ? 'white' : 'black', fontWeight: 'bold' }}>All</button>
-            {uniqueTags.map(tag => (
-               <button key={tag} onClick={() => setActiveTag(tag)} style={{ padding: '8px 16px', borderRadius: '20px', border: 'none', cursor: 'pointer', backgroundColor: activeTag === tag ? 'black' : '#f0f0f0', color: activeTag === tag ? 'white' : 'black', textTransform: 'capitalize' }}>{tag}</button>
-            ))}
-          </div>
-
-          {/* CATEGORY DELETE */}
-          {activeTag && filteredBookmarks.length > 0 && (
-             <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff0f0', padding: '10px 15px', borderRadius: '8px', border: '1px solid #ffcccc' }}>
-                <span style={{ color: '#d00000'}}>Showing {filteredBookmarks.length} items in <b>#{activeTag}</b></span>
-                <button onClick={handleDeleteCategory} style={{ backgroundColor: '#d00000', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' }}>Delete All in #{activeTag}</button>
-             </div>
+      {/* ADD MODAL */}
+      {view === 'add' && (
+        <div style={{maxWidth: '900px', margin: '40px auto', background: 'white', padding: '40px', borderRadius: '15px', boxShadow: '0 5px 30px rgba(0,0,0,0.1)'}}>
+          <div style={{display:'flex', justifyContent:'space-between', marginBottom:'20px'}}><h2>New Entry</h2><button onClick={() => setView('gallery')} style={{background:'none', border:'none', fontSize:'20px', cursor:'pointer'}}>✕</button></div>
+          {step === 'input' && (
+            <form onSubmit={handleAnalyze} style={{display:'flex', gap:'10px'}}>
+              <input type="url" required placeholder="Paste Campaign URL..." value={url} onChange={e => setUrl(e.target.value)} style={{flex: 1, padding: '15px', border: '1px solid #ddd', borderRadius: '5px'}} />
+              <button style={{padding: '15px 30px', background: 'black', color: 'white', border:'none', borderRadius: '5px', cursor:'pointer'}}>Analyze</button>
+            </form>
           )}
-
-          {/* GRID */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
-            {filteredBookmarks.map((item) => (
-              <div key={item.id} style={{ border: '1px solid #eee', borderRadius: '10px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ height: '180px', backgroundColor: '#f0f0f0', overflow: 'hidden' }}>
-                  {item.image ? <img src={item.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
-                </div>
+          {step === 'loading' && <p style={{textAlign:'center', padding:'40px'}}>{loadingMsg}</p>}
+          {step === 'review' && analysis && (
+            <div>
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px'}}>
+                <input value={analysis.brand || ''} onChange={e => setAnalysis({...analysis, brand: e.target.value})} placeholder="Brand" style={inputStyle} />
+                <input value={analysis.brand_url || ''} onChange={e => setAnalysis({...analysis, brand_url: e.target.value})} placeholder="Brand URL" style={inputStyle} />
+                <input value={analysis.title || ''} onChange={e => setAnalysis({...analysis, title: e.target.value})} placeholder="Title" style={inputStyle} />
+                <textarea value={analysis.insight || ''} onChange={e => setAnalysis({...analysis, insight: e.target.value})} placeholder="Insight" style={{...inputStyle, gridColumn:'1/-1', minHeight:'60px'}} />
+                <textarea value={analysis.analysis || ''} onChange={e => setAnalysis({...analysis, analysis: e.target.value})} placeholder="Detailed Analysis" style={{...inputStyle, gridColumn:'1/-1', minHeight:'150px'}} />
                 
-                <div style={{ padding: '15px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <h3 style={{ fontSize: '18px', margin: '0 0 8px 0' }}><a href={item.url} target="_blank" style={{ textDecoration: 'none', color: '#333' }}>{item.title || 'Untitled'}</a></h3>
-                    
-                    {/* EDIT MODE */}
-                    {editingId === item.id ? (
-                      <div style={{ marginBottom: '10px' }}>
-                        <input 
-                          type="text" 
-                          value={editTags} 
-                          onChange={(e) => setEditTags(e.target.value)}
-                          placeholder="tech, news..."
-                          autoFocus
-                          style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #333', marginBottom: '5px' }}
-                        />
-                        <div style={{ display: 'flex', gap: '5px' }}>
-                          <button onClick={() => saveEdit(item.id)} style={{ flex: 1, padding: '5px', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>Save</button>
-                          <button onClick={cancelEditing} style={{ flex: 1, padding: '5px', backgroundColor: '#ccc', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>Cancel</button>
-                        </div>
-                      </div>
-                    ) : (
-                    /* VIEW MODE */
-                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '5px', marginBottom: '10px', minHeight: '24px' }}>
-                        {item.tags && item.tags.split(',').map(t => (
-                          <span key={t} style={{ backgroundColor: '#f0f0f0', padding: '3px 8px', borderRadius: '4px', fontSize: '12px', color: '#555' }}>#{t.trim()}</span>
-                        ))}
-                        <button 
-                          onClick={() => startEditing(item)}
-                          title="Edit Tags"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#888', padding: '0 5px' }}
-                        >
-                          ✎
-                        </button>
-                      </div>
-                    )}
-
-                    <button onClick={() => handleDelete(item.id)} style={{ marginTop: 'auto', padding: '8px', background: 'none', border: '1px solid #ff4444', color: '#ff4444', borderRadius: '4px', cursor: 'pointer' }}>Delete</button>
+                <input value={analysis.slogan || ''} onChange={e => setAnalysis({...analysis, slogan: e.target.value})} placeholder="Slogan" style={inputStyle} />
+                <input value={analysis.archetype || ''} onChange={e => setAnalysis({...analysis, archetype: e.target.value})} placeholder="Archetype" style={inputStyle} />
+                <input value={analysis.agency || ''} onChange={e => setAnalysis({...analysis, agency: e.target.value})} placeholder="Agency" style={inputStyle} />
+                <input value={analysis.year || ''} onChange={e => setAnalysis({...analysis, year: e.target.value})} placeholder="Year" style={inputStyle} />
+                <input value={analysis.format || ''} onChange={e => setAnalysis({...analysis, format: e.target.value})} placeholder="Medium / Format" style={inputStyle} />
+                <input value={analysis.sector || ''} onChange={e => setAnalysis({...analysis, sector: e.target.value})} placeholder="Sector" style={inputStyle} />
+                
+                {/* MANUAL TAGS INPUT */}
+                <div style={{gridColumn: '1/-1'}}>
+                  <input value={userTags} onChange={e => setUserTags(e.target.value)} placeholder="Your Tags (Max 3, comma separated)" style={{...inputStyle, border: '1px solid black'}} />
+                  
+                  {/* NEW TAG CLOUD */}
+                  {uniqueFilters.length > 0 && (
+                    <div style={{marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '8px'}}>
+                      <span style={{fontSize: '12px', color: '#666', alignSelf: 'center', marginRight:'5px'}}>Use existing:</span>
+                      {uniqueFilters.map(tag => {
+                        const isSelected = userTags.includes(tag);
+                        return (
+                          <button 
+                            key={tag} 
+                            onClick={() => toggleUserTag(tag)}
+                            style={{
+                              padding: '5px 10px', 
+                              borderRadius: '15px', 
+                              border: isSelected ? '1px solid black' : '1px solid #ddd', 
+                              background: isSelected ? 'black' : 'white', 
+                              color: isSelected ? 'white' : 'black',
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {tag}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
-            ))}
-            {filteredBookmarks.length === 0 && <p style={{ color: '#999', gridColumn: '1 / -1', textAlign: 'center' }}>No bookmarks found.</p>}
-          </div>
-        </>
+              <h4>Select Assets</h4>
+              <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px', marginBottom: '30px'}}>
+                {window.tempImages && window.tempImages.map((img, i) => (
+                  <img key={i} src={img} onClick={() => toggleImage(img)} style={{width: '100%', height: '100px', objectFit: 'cover', cursor: 'pointer', border: selectedImages.includes(img) ? '4px solid #0070f3' : '1px solid #eee', opacity: selectedImages.includes(img) ? 1 : 0.6}} />
+                ))}
+              </div>
+              <button onClick={handleSave} style={{width:'100%', padding:'15px', background:'green', color:'white', border:'none', borderRadius:'5px', cursor:'pointer', fontWeight:'bold'}}>Save to Vault</button>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
 }
+
+const inputStyle = { padding:'12px', border:'1px solid #ddd', borderRadius:'6px', width:'100%' };
+const pill = { padding:'8px 16px', borderRadius:'20px', border:'1px solid #ddd', background:'white', cursor:'pointer', whiteSpace:'nowrap'};
+const activePill = { ...pill, background:'black', color:'white', borderColor:'black' };
