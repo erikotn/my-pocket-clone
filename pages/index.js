@@ -39,6 +39,7 @@ export default function Home() {
     if (savedPass) { setPassword(savedPass); handleLogin(null, savedPass); }
   }, []);
 
+  // Android Share Listener
   useEffect(() => {
     if (!router.isReady) return;
     const { text, link } = router.query;
@@ -46,6 +47,8 @@ export default function Home() {
     if (sharedUrl) {
       const urlMatch = sharedUrl.match(/(https?:\/\/[^\s]+)/);
       setUrl(urlMatch ? urlMatch[0] : sharedUrl);
+      // Auto-switch to inbox if sharing
+      setActiveTab('inbox');
     }
   }, [router.isReady, router.query]);
 
@@ -80,15 +83,13 @@ export default function Home() {
   }
 
   async function toggleArchive(id, currentStatus) {
-    // Optimistic UI update (feels faster)
     setBookmarks(bookmarks.map(b => b.id === id ? { ...b, is_archived: !currentStatus } : b));
-    
     await fetch('/api/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, is_archived: !currentStatus, password }),
     });
-    handleLogin(null, password); // Sync to be sure
+    handleLogin(null, password); 
   }
 
   async function handleDelete(id) {
@@ -112,7 +113,7 @@ export default function Home() {
   // 3. LOGIC ENGINES
   function findConnections(targetItem) {
     if (showRelatedFor === targetItem.id) { setShowRelatedFor(null); return; }
-    const stopWords = ['the','is','a','an','and','or','for','to','in','of','with','at','from','by','on','how'];
+    const stopWords = ['the','is','a','an','and','or','for','to','in','of','with','at','from','by','on','how','what','why'];
     const getTokens = (str) => (!str ? [] : str.toLowerCase().replace(/[^\w\s]/g,'').split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w)));
     
     const targetTags = targetItem.tags ? targetItem.tags.toLowerCase().split(',').map(t=>t.trim()) : [];
@@ -151,12 +152,10 @@ export default function Home() {
   const uniqueTags = [...new Set(allTagsRaw.map(t => t.trim().toLowerCase()))].sort();
   
   const filteredBookmarks = bookmarks.filter(item => {
-    // Tab Filter (Inbox vs Archive)
-    const isArchived = item.is_archived === true; // strict check
+    const isArchived = item.is_archived === true; 
     if (activeTab === 'inbox' && isArchived) return false;
     if (activeTab === 'archive' && !isArchived) return false;
 
-    // Search/Tag Filter
     const matchesTag = !activeTag || (item.tags && item.tags.toLowerCase().includes(activeTag.toLowerCase()));
     const q = searchQuery.toLowerCase();
     const matchesSearch = !q || (item.title?.toLowerCase().includes(q)) || (item.url?.toLowerCase().includes(q)) || (item.tags?.includes(q)) || (item.note?.toLowerCase().includes(q));
@@ -248,11 +247,11 @@ export default function Home() {
               )}
             </div>
 
-            {/* ACTION BAR (Tightened Up) */}
+            {/* ACTION BAR (Updated to 'Related' + 'Link Icon') */}
             <div style={{borderTop:'1px solid #f0f0f0', padding:'10px 15px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fafafa'}}>
-              {/* Left: Connect */}
+              {/* Left: Related */}
               <button onClick={() => findConnections(item)} style={{background:'none', border:'none', color: showRelatedFor===item.id ? '#0070f3' : '#888', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px', padding:0}}>
-                 ⚡️ <span style={{fontSize:'11px', fontWeight:'600'}}>Connect</span>
+                 🔗 <span style={{fontSize:'11px', fontWeight:'600'}}>Related</span>
               </button>
 
               {/* Right: Actions */}
