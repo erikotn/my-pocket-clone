@@ -32,6 +32,9 @@ export default function Home() {
   const [reviewItem, setReviewItem] = useState(null);
   const [relatedItems, setRelatedItems] = useState([]);
   const [showRelatedFor, setShowRelatedFor] = useState(null);
+  
+  // DELETE CONFIRMATION STATE (The new "Floating" popup logic)
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
   // 1. INITIALIZATION
   useEffect(() => {
@@ -47,7 +50,6 @@ export default function Home() {
     if (sharedUrl) {
       const urlMatch = sharedUrl.match(/(https?:\/\/[^\s]+)/);
       setUrl(urlMatch ? urlMatch[0] : sharedUrl);
-      // Auto-switch to inbox if sharing
       setActiveTab('inbox');
     }
   }, [router.isReady, router.query]);
@@ -92,10 +94,11 @@ export default function Home() {
     handleLogin(null, password); 
   }
 
-  async function handleDelete(id) {
-    if (!confirm('Delete permanently?')) return;
+  // UPDATED: Now executes the delete immediately (called by the "Yes" button)
+  async function executeDelete(id) {
     await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, password }) });
     setReviewItem(null);
+    setDeleteConfirmId(null); // Clear the confirmation state
     handleLogin(null, password); 
   }
 
@@ -247,24 +250,37 @@ export default function Home() {
               )}
             </div>
 
-            {/* ACTION BAR (Updated to 'Related' + 'Link Icon') */}
-            <div style={{borderTop:'1px solid #f0f0f0', padding:'10px 15px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fafafa'}}>
-              {/* Left: Related */}
-              <button onClick={() => findConnections(item)} style={{background:'none', border:'none', color: showRelatedFor===item.id ? '#0070f3' : '#888', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px', padding:0}}>
-                 🔗 <span style={{fontSize:'11px', fontWeight:'600'}}>Related</span>
-              </button>
+            {/* ACTION BAR (THE CHANGE) */}
+            <div style={{borderTop:'1px solid #f0f0f0', padding:'10px 15px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fafafa', minHeight:'45px'}}>
+              
+              {/* If "deleteConfirmId" matches this card, show the CONFIRMATION BAR */}
+              {deleteConfirmId === item.id ? (
+                <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', background:'#fff0f0', margin:'-10px -15px', padding:'10px 15px'}}>
+                  <span style={{color:'#d32f2f', fontSize:'13px', fontWeight:'bold'}}>Are you sure?</span>
+                  <div style={{display:'flex', gap:'10px'}}>
+                    <button onClick={() => executeDelete(item.id)} style={{background:'#d32f2f', color:'white', border:'none', borderRadius:'4px', padding:'5px 10px', cursor:'pointer', fontSize:'12px', fontWeight:'bold'}}>Yes</button>
+                    <button onClick={() => setDeleteConfirmId(null)} style={{background:'#ccc', color:'black', border:'none', borderRadius:'4px', padding:'5px 10px', cursor:'pointer', fontSize:'12px'}}>No</button>
+                  </div>
+                </div>
+              ) : (
+                /* Otherwise, show the NORMAL ACTION BAR */
+                <>
+                  <button onClick={() => findConnections(item)} style={{background:'none', border:'none', color: showRelatedFor===item.id ? '#0070f3' : '#888', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px', padding:0}}>
+                     🔗 <span style={{fontSize:'11px', fontWeight:'600'}}>Related</span>
+                  </button>
 
-              {/* Right: Actions */}
-              <div style={{display:'flex', gap:'15px'}}>
-                 <button onClick={() => startEditing(item)} title="Edit" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#888', padding:0}}>✏️</button>
-                 
-                 {/* Archive / Unarchive Button */}
-                 <button onClick={() => toggleArchive(item.id, item.is_archived)} title={item.is_archived ? "Unarchive" : "Archive"} style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color: item.is_archived ? '#0070f3' : '#888', padding:0}}>
-                    {item.is_archived ? '📥' : '✅'}
-                 </button>
-                 
-                 <button onClick={() => handleDelete(item.id)} title="Delete" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#ff4444', padding:0}}>🗑</button>
-              </div>
+                  <div style={{display:'flex', gap:'15px'}}>
+                     <button onClick={() => startEditing(item)} title="Edit" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#888', padding:0}}>✏️</button>
+                     
+                     <button onClick={() => toggleArchive(item.id, item.is_archived)} title={item.is_archived ? "Unarchive" : "Archive"} style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color: item.is_archived ? '#0070f3' : '#888', padding:0}}>
+                        {item.is_archived ? '📥' : '✅'}
+                     </button>
+                     
+                     {/* The Delete Trigger */}
+                     <button onClick={() => setDeleteConfirmId(item.id)} title="Delete" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#ff4444', padding:0}}>🗑</button>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Related Drawer */}
@@ -296,7 +312,7 @@ export default function Home() {
             
             <div style={{display:'flex', gap:'10px', justifyContent:'center', marginTop:'20px'}}>
               <button onClick={() => toggleArchive(reviewItem.id, false)} style={{flex:1, padding:'12px', background:'#eee', border:'none', borderRadius:'8px', cursor:'pointer', fontWeight:'bold'}}>Keep / Archive</button>
-              <button onClick={() => handleDelete(reviewItem.id)} style={{flex:1, padding:'12px', background:'#ffebee', color:'#d32f2f', border:'none', borderRadius:'8px', cursor:'pointer', fontWeight:'bold'}}>Delete</button>
+              <button onClick={() => executeDelete(reviewItem.id)} style={{flex:1, padding:'12px', background:'#ffebee', color:'#d32f2f', border:'none', borderRadius:'8px', cursor:'pointer', fontWeight:'bold'}}>Delete</button>
             </div>
           </div>
         </div>
