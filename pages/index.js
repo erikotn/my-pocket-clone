@@ -33,7 +33,7 @@ export default function Home() {
   const [relatedItems, setRelatedItems] = useState([]);
   const [showRelatedFor, setShowRelatedFor] = useState(null);
   
-  // DELETE CONFIRMATION STATE (The new "Floating" popup logic)
+  // Delete Confirm State
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
   // 1. INITIALIZATION
@@ -94,11 +94,10 @@ export default function Home() {
     handleLogin(null, password); 
   }
 
-  // UPDATED: Now executes the delete immediately (called by the "Yes" button)
   async function executeDelete(id) {
     await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, password }) });
     setReviewItem(null);
-    setDeleteConfirmId(null); // Clear the confirmation state
+    setDeleteConfirmId(null);
     handleLogin(null, password); 
   }
 
@@ -149,6 +148,11 @@ export default function Home() {
     setTags(curr.join(', '));
   }
   function startEditing(item) { setEditingId(item.id); setEditTags(item.tags || ''); setEditNote(item.note || ''); }
+  
+  // Get hostname safely for Favicon
+  function getHostname(url) {
+    try { return new URL(url).hostname; } catch(e) { return ''; }
+  }
 
   // 4. FILTERING
   const allTagsRaw = bookmarks.flatMap(item => item.tags ? item.tags.split(',') : []);
@@ -168,116 +172,135 @@ export default function Home() {
   if (!isLoggedIn) return <div style={{height:'100vh', display:'flex', alignItems:'center', justifyContent:'center'}}><form onSubmit={e => handleLogin(e, null)} style={{display:'flex', flexDirection:'column', gap:'10px'}}><h1>My Pocket 🔒</h1><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" style={{padding:'10px'}} /><button style={{padding:'10px'}}>Unlock</button></form></div>;
 
   return (
-    <div style={{ maxWidth: '1000px', margin: '0 auto', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', padding: '20px', color:'#111' }}>
-      
+    <div className="container">
+      {/* GLOBAL STYLES FOR COMPACT MOBILE VIEW */}
+      <style jsx global>{`
+        .container { max-width: 1000px; margin: 0 auto; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        .card { border: 1px solid #eee; border-radius: 12px; overflow: hidden; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.03); display: flex; flex-direction: column; }
+        .card-image { height: 160px; background-color: #f8f8f8; overflow: hidden; position: relative; }
+        
+        /* Mobile Improvements */
+        @media (max-width: 600px) {
+          .container { padding: 10px; }
+          .grid { grid-template-columns: 1fr; gap: 12px; }
+          .card-image { height: 130px; } /* More compact images */
+          h3 { font-size: 15px !important; }
+        }
+      `}</style>
+
       {/* HEADER AREA */}
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
-        <h2 style={{margin:0, cursor:'pointer'}} onClick={() => {setActiveTag(''); setSearchQuery('');}}>My Pocket</h2>
-        <div style={{display:'flex', gap:'10px'}}>
-           <button onClick={startReview} title="Rediscover a random link" style={{background:'#eee', border:'none', width:'40px', height:'40px', borderRadius:'50%', cursor:'pointer', fontSize:'20px'}}>🎲</button>
-           <div style={{background:'#eee', borderRadius:'20px', padding:'4px', display:'flex'}}>
-              <button onClick={()=>setActiveTab('inbox')} style={{background: activeTab==='inbox' ? 'white' : 'transparent', border:'none', padding:'8px 16px', borderRadius:'16px', cursor:'pointer', fontWeight: activeTab==='inbox'?'bold':'normal', boxShadow: activeTab==='inbox'?'0 2px 5px rgba(0,0,0,0.1)': 'none'}}>Inbox</button>
-              <button onClick={()=>setActiveTab('archive')} style={{background: activeTab==='archive' ? 'white' : 'transparent', border:'none', padding:'8px 16px', borderRadius:'16px', cursor:'pointer', fontWeight: activeTab==='archive'?'bold':'normal', boxShadow: activeTab==='archive'?'0 2px 5px rgba(0,0,0,0.1)': 'none'}}>Archive</button>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
+        <h2 style={{margin:0, cursor:'pointer', fontSize:'20px'}} onClick={() => {setActiveTag(''); setSearchQuery('');}}>My Pocket</h2>
+        <div style={{display:'flex', gap:'8px'}}>
+           <button onClick={startReview} title="Rediscover" style={{background:'#f0f0f0', border:'none', width:'36px', height:'36px', borderRadius:'50%', cursor:'pointer', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center'}}>🎲</button>
+           <div style={{background:'#f0f0f0', borderRadius:'20px', padding:'3px', display:'flex'}}>
+              <button onClick={()=>setActiveTab('inbox')} style={{background: activeTab==='inbox' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='inbox'?'bold':'normal', boxShadow: activeTab==='inbox'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Inbox</button>
+              <button onClick={()=>setActiveTab('archive')} style={{background: activeTab==='archive' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='archive'?'bold':'normal', boxShadow: activeTab==='archive'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Archive</button>
            </div>
         </div>
       </div>
 
-      {/* INPUT (Only visible in Inbox) */}
+      {/* INPUT (Inbox Only) */}
       {activeTab === 'inbox' && (
-        <div style={{ backgroundColor: '#f9f9f9', padding: '20px', borderRadius: '12px', marginBottom: '30px' }}>
-          <form onSubmit={handleSave} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste link to save..." required style={{ flex: 2, minWidth: '200px', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize:'16px' }} />
-            <div style={{flex: 1, minWidth: '200px', display:'flex', flexDirection:'column', gap:'8px'}}>
-               <input type="text" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="Tags (design, tech...)" style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ddd' }} />
-               <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (Why?)" style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ddd' }} />
+        <div style={{ backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
+          <form onSubmit={handleSave} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste link..." required style={{ flex: 2, minWidth: '180px', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize:'15px' }} />
+            <div style={{flex: 1, minWidth: '180px', display:'flex', flexDirection:'column', gap:'6px'}}>
+               <input type="text" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="Tags..." style={{ padding: '8px', borderRadius: '8px', border: '1px solid #ddd', fontSize:'13px' }} />
+               <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note..." style={{ padding: '8px', borderRadius: '8px', border: '1px solid #ddd', fontSize:'13px' }} />
             </div>
-            <button disabled={loading} style={{ padding: '0 25px', backgroundColor: 'black', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight:'bold' }}>{loading ? '...' : 'Save'}</button>
+            <button disabled={loading} style={{ padding: '0 20px', backgroundColor: 'black', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight:'bold', fontSize:'13px' }}>{loading ? '...' : 'Save'}</button>
           </form>
           {uniqueTags.length > 0 && (
-            <div style={{marginTop: '10px', display: 'flex', gap: '6px', flexWrap: 'wrap'}}>
+            <div style={{marginTop: '8px', display: 'flex', gap: '5px', flexWrap: 'wrap'}}>
               {uniqueTags.map(tag => {
                 const isSelected = tags.includes(tag);
-                return <button key={tag} onClick={() => toggleTag(tag)} type="button" style={{padding: '4px 10px', borderRadius: '12px', border: isSelected ? '1px solid black' : '1px solid #ddd', backgroundColor: isSelected ? 'black' : 'white', color: isSelected ? 'white' : '#666', fontSize: '11px', cursor: 'pointer'}}>{tag}</button>
+                return <button key={tag} onClick={() => toggleTag(tag)} type="button" style={{padding: '3px 8px', borderRadius: '10px', border: isSelected ? '1px solid black' : '1px solid #ddd', backgroundColor: isSelected ? 'black' : 'white', color: isSelected ? 'white' : '#666', fontSize: '11px', cursor: 'pointer'}}>{tag}</button>
               })}
             </div>
           )}
-          {message && <p style={{ color: message.includes('❌') ? 'red' : 'green', margin: '10px 0 0 0', fontSize:'12px' }}>{message}</p>}
+          {message && <p style={{ color: message.includes('❌') ? 'red' : 'green', margin: '8px 0 0 0', fontSize:'12px' }}>{message}</p>}
         </div>
       )}
 
       {/* SEARCH */}
-      <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="🔍 Find..." style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #eee', fontSize: '16px', marginBottom:'15px', background:'#fff' }} />
+      <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="🔍 Find..." style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #eee', fontSize: '15px', marginBottom:'15px', background:'#fff' }} />
       
       {/* CARD GRID */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+      <div className="grid">
         {filteredBookmarks.map((item) => (
-          <div key={item.id} style={{ border: '1px solid #eee', borderRadius: '12px', overflow: 'hidden', background:'white', boxShadow: '0 2px 10px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column' }}>
+          <div key={item.id} className="card">
             
-            {/* Image & Title Area */}
+            {/* Image Area with Fallback */}
             <a href={item.url} target="_blank" style={{textDecoration:'none', color:'inherit', display:'block'}}>
-              <div style={{ height: '160px', backgroundColor: '#f4f4f4', overflow: 'hidden', position:'relative' }}>
-                {item.image ? <img src={item.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#ccc', fontSize:'12px' }}>No Preview</div>}
+              <div className="card-image">
+                {item.image ? (
+                  <img src={item.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  // ELEGANT FALLBACK: Centered Favicon
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection:'column', gap:'5px' }}>
+                     <img 
+                       src={`https://www.google.com/s2/favicons?domain=${getHostname(item.url)}&sz=128`} 
+                       style={{width:'48px', height:'48px', objectFit:'contain'}} 
+                       onError={(e) => e.target.style.display='none'} // Hide if fails
+                     />
+                  </div>
+                )}
               </div>
-              <div style={{ padding: '15px 15px 5px 15px' }}>
-                <h3 style={{ fontSize: '16px', margin: '0 0 6px 0', lineHeight:'1.4' }}>{item.title || 'Untitled Link'}</h3>
-                <div style={{color:'#888', fontSize:'11px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{new URL(item.url).hostname.replace('www.','')}</div>
+              <div style={{ padding: '12px 12px 4px 12px' }}>
+                <h3 style={{ fontSize: '16px', margin: '0 0 4px 0', lineHeight:'1.3', fontWeight:'600' }}>{item.title || 'Untitled Link'}</h3>
+                <div style={{color:'#999', fontSize:'11px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{getHostname(item.url)}</div>
               </div>
             </a>
 
             {/* Content Body */}
-            <div style={{ padding: '0 15px 15px 15px', flex: 1 }}>
-              {/* Note */}
+            <div style={{ padding: '0 12px 12px 12px', flex: 1 }}>
               {item.note && editingId !== item.id && (
-                <div style={{background:'#fff9db', padding:'8px 10px', borderRadius:'6px', fontSize:'13px', color:'#555', marginTop:'10px', borderLeft:'3px solid #fcc419'}}>
+                <div style={{background:'#fff9db', padding:'6px 8px', borderRadius:'4px', fontSize:'12px', color:'#444', marginTop:'8px', borderLeft:'3px solid #fcc419', lineHeight:'1.4'}}>
                   {item.note}
                 </div>
               )}
 
-              {/* Edit Form */}
               {editingId === item.id ? (
                 <div style={{marginTop:'10px', padding:'10px', background:'#f9f9f9', borderRadius:'8px'}}>
-                  <input value={editTags} onChange={e => setEditTags(e.target.value)} style={{width:'100%', padding:'6px', marginBottom:'5px', border:'1px solid #ddd', borderRadius:'4px'}} placeholder="Tags" />
-                  <input value={editNote} onChange={e => setEditNote(e.target.value)} style={{width:'100%', padding:'6px', marginBottom:'5px', border:'1px solid #ddd', borderRadius:'4px'}} placeholder="Note" />
+                  <input value={editTags} onChange={e => setEditTags(e.target.value)} style={{width:'100%', padding:'6px', marginBottom:'5px', border:'1px solid #ddd', borderRadius:'4px', fontSize:'13px'}} placeholder="Tags" />
+                  <input value={editNote} onChange={e => setEditNote(e.target.value)} style={{width:'100%', padding:'6px', marginBottom:'5px', border:'1px solid #ddd', borderRadius:'4px', fontSize:'13px'}} placeholder="Note" />
                   <div style={{display:'flex', gap:'5px'}}>
                     <button onClick={() => saveEdit(item.id)} style={{flex:1, background:'black', color:'white', border:'none', padding:'6px', borderRadius:'4px', cursor:'pointer', fontSize:'12px'}}>Save</button>
                     <button onClick={() => setEditingId(null)} style={{flex:1, background:'#ddd', border:'none', padding:'6px', borderRadius:'4px', cursor:'pointer', fontSize:'12px'}}>Cancel</button>
                   </div>
                 </div>
               ) : (
-                <div style={{ marginTop: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                  {item.tags && item.tags.split(',').map(t => <span key={t} style={{ backgroundColor: '#f0f0f0', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', color: '#666' }}>#{t.trim()}</span>)}
+                <div style={{ marginTop: '8px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                  {item.tags && item.tags.split(',').map(t => <span key={t} style={{ backgroundColor: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', color: '#666', fontWeight:'500' }}>#{t.trim()}</span>)}
                 </div>
               )}
             </div>
 
-            {/* ACTION BAR (THE CHANGE) */}
-            <div style={{borderTop:'1px solid #f0f0f0', padding:'10px 15px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fafafa', minHeight:'45px'}}>
+            {/* ACTION BAR (Compact) */}
+            <div style={{borderTop:'1px solid #f0f0f0', padding:'8px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fafafa', minHeight:'40px'}}>
               
-              {/* If "deleteConfirmId" matches this card, show the CONFIRMATION BAR */}
               {deleteConfirmId === item.id ? (
-                <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', background:'#fff0f0', margin:'-10px -15px', padding:'10px 15px'}}>
-                  <span style={{color:'#d32f2f', fontSize:'13px', fontWeight:'bold'}}>Are you sure?</span>
-                  <div style={{display:'flex', gap:'10px'}}>
-                    <button onClick={() => executeDelete(item.id)} style={{background:'#d32f2f', color:'white', border:'none', borderRadius:'4px', padding:'5px 10px', cursor:'pointer', fontSize:'12px', fontWeight:'bold'}}>Yes</button>
-                    <button onClick={() => setDeleteConfirmId(null)} style={{background:'#ccc', color:'black', border:'none', borderRadius:'4px', padding:'5px 10px', cursor:'pointer', fontSize:'12px'}}>No</button>
+                <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', background:'#fff0f0', margin:'-8px -12px', padding:'8px 12px'}}>
+                  <span style={{color:'#d32f2f', fontSize:'12px', fontWeight:'bold'}}>Delete?</span>
+                  <div style={{display:'flex', gap:'8px'}}>
+                    <button onClick={() => executeDelete(item.id)} style={{background:'#d32f2f', color:'white', border:'none', borderRadius:'4px', padding:'4px 8px', cursor:'pointer', fontSize:'11px', fontWeight:'bold'}}>Yes</button>
+                    <button onClick={() => setDeleteConfirmId(null)} style={{background:'#ccc', color:'black', border:'none', borderRadius:'4px', padding:'4px 8px', cursor:'pointer', fontSize:'11px'}}>No</button>
                   </div>
                 </div>
               ) : (
-                /* Otherwise, show the NORMAL ACTION BAR */
                 <>
-                  <button onClick={() => findConnections(item)} style={{background:'none', border:'none', color: showRelatedFor===item.id ? '#0070f3' : '#888', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px', padding:0}}>
+                  <button onClick={() => findConnections(item)} style={{background:'none', border:'none', color: showRelatedFor===item.id ? '#0070f3' : '#999', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px', padding:0}}>
                      🔗 <span style={{fontSize:'11px', fontWeight:'600'}}>Related</span>
                   </button>
 
-                  <div style={{display:'flex', gap:'15px'}}>
-                     <button onClick={() => startEditing(item)} title="Edit" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#888', padding:0}}>✏️</button>
-                     
-                     <button onClick={() => toggleArchive(item.id, item.is_archived)} title={item.is_archived ? "Unarchive" : "Archive"} style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color: item.is_archived ? '#0070f3' : '#888', padding:0}}>
+                  <div style={{display:'flex', gap:'12px'}}>
+                     <button onClick={() => startEditing(item)} title="Edit" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#999', padding:0}}>✏️</button>
+                     <button onClick={() => toggleArchive(item.id, item.is_archived)} title={item.is_archived ? "Unarchive" : "Archive"} style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color: item.is_archived ? '#0070f3' : '#999', padding:0}}>
                         {item.is_archived ? '📥' : '✅'}
                      </button>
-                     
-                     {/* The Delete Trigger */}
-                     <button onClick={() => setDeleteConfirmId(item.id)} title="Delete" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#ff4444', padding:0}}>🗑</button>
+                     <button onClick={() => setDeleteConfirmId(item.id)} title="Delete" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#ff6b6b', padding:0}}>🗑</button>
                   </div>
                 </>
               )}
@@ -285,11 +308,11 @@ export default function Home() {
 
             {/* Related Drawer */}
             {showRelatedFor === item.id && (
-              <div style={{background:'#f0f7ff', padding:'10px 15px', borderTop:'1px solid #cfe2ff'}}>
+              <div style={{background:'#f0f7ff', padding:'8px 12px', borderTop:'1px solid #cfe2ff'}}>
                 {relatedItems.length === 0 ? <div style={{fontSize:'11px', color:'#666'}}>No matches found.</div> : (
                   <div style={{display:'flex', flexDirection:'column', gap:'6px'}}>
                     {relatedItems.map(r => (
-                      <a key={r.id} href={r.url} target="_blank" style={{fontSize:'12px', textDecoration:'none', color:'#000'}}>
+                      <a key={r.id} href={r.url} target="_blank" style={{fontSize:'11px', textDecoration:'none', color:'#000', display:'block', lineHeight:'1.3'}}>
                         ↳ {r.title} <span style={{color:'#888', fontSize:'10px'}}>({r.score})</span>
                       </a>
                     ))}
@@ -304,15 +327,15 @@ export default function Home() {
       {/* REDISCOVER MODAL */}
       {reviewItem && (
         <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000}}>
-          <div style={{background:'white', padding:'30px', borderRadius:'16px', maxWidth:'400px', width:'90%', textAlign:'center', position:'relative'}}>
+          <div style={{background:'white', padding:'25px', borderRadius:'16px', maxWidth:'350px', width:'90%', textAlign:'center', position:'relative'}}>
             <button onClick={() => setReviewItem(null)} style={{position:'absolute', top:'10px', right:'10px', border:'none', background:'none', fontSize:'18px', cursor:'pointer'}}>✕</button>
             <div style={{fontSize:'40px', marginBottom:'10px'}}>🎲</div>
-            <h3 style={{margin:'0 0 10px 0'}}><a href={reviewItem.url} target="_blank" style={{color:'black'}}>{reviewItem.title}</a></h3>
-            {reviewItem.note && <p style={{background:'#fff9db', padding:'10px', fontStyle:'italic', margin:'10px 0', borderRadius:'6px'}}>"{reviewItem.note}"</p>}
+            <h3 style={{margin:'0 0 10px 0', fontSize:'18px', lineHeight:'1.3'}}><a href={reviewItem.url} target="_blank" style={{color:'black'}}>{reviewItem.title}</a></h3>
+            {reviewItem.note && <p style={{background:'#fff9db', padding:'10px', fontStyle:'italic', margin:'10px 0', borderRadius:'6px', fontSize:'13px'}}>"{reviewItem.note}"</p>}
             
             <div style={{display:'flex', gap:'10px', justifyContent:'center', marginTop:'20px'}}>
-              <button onClick={() => toggleArchive(reviewItem.id, false)} style={{flex:1, padding:'12px', background:'#eee', border:'none', borderRadius:'8px', cursor:'pointer', fontWeight:'bold'}}>Keep / Archive</button>
-              <button onClick={() => executeDelete(reviewItem.id)} style={{flex:1, padding:'12px', background:'#ffebee', color:'#d32f2f', border:'none', borderRadius:'8px', cursor:'pointer', fontWeight:'bold'}}>Delete</button>
+              <button onClick={() => toggleArchive(reviewItem.id, false)} style={{flex:1, padding:'10px', background:'#eee', border:'none', borderRadius:'8px', cursor:'pointer', fontWeight:'bold', fontSize:'13px'}}>Keep</button>
+              <button onClick={() => executeDelete(reviewItem.id)} style={{flex:1, padding:'10px', background:'#ffebee', color:'#d32f2f', border:'none', borderRadius:'8px', cursor:'pointer', fontWeight:'bold', fontSize:'13px'}}>Delete</button>
             </div>
           </div>
         </div>
