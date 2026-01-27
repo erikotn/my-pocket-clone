@@ -23,7 +23,7 @@ export default async function handler(req, res) {
     // --- 1. SPECIAL HANDLER FOR X / TWITTER ---
     if (link.includes('x.com') || link.includes('twitter.com')) {
       try {
-        // Trick: The oEmbed API prefers 'twitter.com' over 'x.com'
+        // We force the URL to be 'twitter.com' because the oEmbed API works better with it
         const safeLink = link.replace('x.com', 'twitter.com');
         const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(safeLink)}`;
         
@@ -31,15 +31,13 @@ export default async function handler(req, res) {
         
         if (response.ok) {
           const json = await response.json();
-          
-          // The API gives us the Author Name (e.g. "Elon Musk")
           title = `Tweet by ${json.author_name}`;
           
-          // The API gives us HTML (<blockquote>...</blockquote>). We strip tags to get clean text.
+          // Clean up the HTML to get just text
           const $ = cheerio.load(json.html);
-          summary = $('p').text(); // Extract just the tweet text
+          summary = $('p').text(); 
         } else {
-          title = 'X / Twitter Link'; // Fallback if API fails
+          title = 'X / Twitter Link';
         }
       } catch (e) {
         console.error('Twitter fetch failed', e);
@@ -48,15 +46,20 @@ export default async function handler(req, res) {
     } 
     // --- 2. NORMAL HANDLER FOR ALL OTHER SITES ---
     else {
-      const response = await fetch(link, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' }
-      });
-      const html = await response.text();
-      const $ = cheerio.load(html);
-      
-      title = $('meta[property="og:title"]').attr('content') || $('title').text() || 'Untitled Link';
-      image = $('meta[property="og:image"]').attr('content');
-      summary = $('meta[property="og:description"]').attr('content');
+      try {
+        const response = await fetch(link, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' }
+        });
+        const html = await response.text();
+        const $ = cheerio.load(html);
+        
+        title = $('meta[property="og:title"]').attr('content') || $('title').text() || 'Untitled Link';
+        image = $('meta[property="og:image"]').attr('content');
+        summary = $('meta[property="og:description"]').attr('content');
+      } catch (e) {
+        // If scraping fails completely, just save the URL
+        console.error('Scraping failed', e);
+      }
     }
 
     // Save to Database
