@@ -7,54 +7,62 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
-  // 1. CORS for Chrome Extension
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*'); 
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-  );
-
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
   if (req.method !== 'POST') return res.status(405).send('Only POST allowed');
 
-  const { link, tags, password } = req.body;
+  const { link, tags, note, password } = req.body;
 
-  // 2. PASSWORD CHECK
   if (password !== process.env.ADMIN_PASSWORD) {
     return res.status(401).json({ error: 'Wrong password!' });
   }
 
   try {
-    // 3. DUPLICATE CHECK (New Feature)
-    // We ask Supabase: "Do we already have this URL?"
-    const { data: existing } = await supabase
-      .from('bookmarks')
-      .select('id')
-      .eq('url', link);
+    let title = 'Untitled Link';
+    let image = null;
+    let summary = '';
 
-    // If we found a match, stop here.
-    if (existing && existing.length > 0) {
-      return res.status(400).json({ error: 'Link already saved!' });
+    // --- 1. SPECIAL HANDLER FOR X / TWITTER ---
+    if (link.includes('x.com') || link.includes('twitter.com')) {
+      try {
+        // Trick: The oEmbed API prefers 'twitter.com' over 'x.com'
+        const safeLink = link.replace('x.com', 'twitter.com');
+        const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(safeLink)}`;
+        
+        const response = await fetch(oembedUrl);
+        
+        if (response.ok) {
+          const json = await response.json();
+          
+          // The API gives us the Author Name (e.g. "Elon Musk")
+          title = `Tweet by ${json.author_name}`;
+          
+          // The API gives us HTML (<blockquote>...</blockquote>). We strip tags to get clean text.
+          const $ = cheerio.load(json.html);
+          summary = $('p').text(); // Extract just the tweet text
+        } else {
+          title = 'X / Twitter Link'; // Fallback if API fails
+        }
+      } catch (e) {
+        console.error('Twitter fetch failed', e);
+        title = 'X / Twitter Link';
+      }
+    } 
+    // --- 2. NORMAL HANDLER FOR ALL OTHER SITES ---
+    else {
+      const response = await fetch(link, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' }
+      });
+      const html = await response.text();
+      const $ = cheerio.load(html);
+      
+      title = $('meta[property="og:title"]').attr('content') || $('title').text() || 'Untitled Link';
+      image = $('meta[property="og:image"]').attr('content');
+      summary = $('meta[property="og:description"]').attr('content');
     }
 
-    // 4. SCRAPE & SAVE
-    const response = await fetch(link);
-    const html = await response.text();
-    const $ = cheerio.load(html);
-    
-    const title = $('meta[property="og:title"]').attr('content') || $('title').text();
-    const image = $('meta[property="og:image"]').attr('content');
-    const summary = $('meta[property="og:description"]').attr('content');
-
+    // Save to Database
     const { data, error } = await supabase
       .from('bookmarks')
-      .insert([{ url: link, title, image, summary, tags }]);
+      .insert([{ url: link, title, image, summary, tags, note }]);
 
     if (error) throw error;
 
