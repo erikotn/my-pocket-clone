@@ -132,8 +132,7 @@ export default function Home() {
     setShowRelatedFor(targetItem.id);
   }
 
-  // --- NEW "CLEANUP MODE" LOGIC ---
-  
+  // --- CLEANUP MODE LOGIC ---
   function nextRandomItem(currentId = null) {
     // Filter out archived items and the current one
     const candidates = bookmarks.filter(b => !b.is_archived && b.id !== currentId);
@@ -141,19 +140,13 @@ export default function Home() {
       setReviewItem(null);
       return alert("No more inbox items to review!");
     }
-    // Pick random
     const next = candidates[Math.floor(Math.random() * candidates.length)];
     setReviewItem(next);
   }
 
   async function cleanupDelete(id) {
-    // 1. Instantly move to next item visually
     nextRandomItem(id);
-    
-    // 2. Remove from local list so it doesn't appear again
     setBookmarks(prev => prev.filter(b => b.id !== id));
-    
-    // 3. Send delete command in background
     await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, password }) });
   }
 
@@ -200,13 +193,11 @@ export default function Home() {
         }
       `}</style>
 
-      {/* HEADER AREA */}
+      {/* HEADER */}
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
         <h2 style={{margin:0, cursor:'pointer', fontSize:'20px'}} onClick={() => {setActiveTag(''); setSearchQuery('');}}>My Pocket</h2>
         <div style={{display:'flex', gap:'8px'}}>
-           {/* THE CLEANUP BUTTON (Dice) */}
            <button onClick={() => nextRandomItem(null)} title="Cleanup Mode" style={{background:'#f0f0f0', border:'none', width:'36px', height:'36px', borderRadius:'50%', cursor:'pointer', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center'}}>🎲</button>
-           
            <div style={{background:'#f0f0f0', borderRadius:'20px', padding:'3px', display:'flex'}}>
               <button onClick={()=>setActiveTab('inbox')} style={{background: activeTab==='inbox' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='inbox'?'bold':'normal', boxShadow: activeTab==='inbox'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Inbox</button>
               <button onClick={()=>setActiveTab('archive')} style={{background: activeTab==='archive' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='archive'?'bold':'normal', boxShadow: activeTab==='archive'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Archive</button>
@@ -214,7 +205,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* INPUT (Inbox Only) */}
+      {/* INPUT */}
       {activeTab === 'inbox' && (
         <div style={{ backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
           <form onSubmit={handleSave} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -237,10 +228,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* SEARCH */}
+      {/* SEARCH & GRID */}
       <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="🔍 Find..." style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #eee', fontSize: '15px', marginBottom:'15px', background:'#fff' }} />
-      
-      {/* CARD GRID */}
       <div className="grid">
         {filteredBookmarks.map((item) => (
           <div key={item.id} className="card">
@@ -279,4 +268,80 @@ export default function Home() {
                 <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', background:'#fff0f0', margin:'-8px -12px', padding:'8px 12px'}}>
                   <span style={{color:'#d32f2f', fontSize:'12px', fontWeight:'bold'}}>Delete?</span>
                   <div style={{display:'flex', gap:'8px'}}>
-                    <button onClick={() => executeDelete(item.id)} style={{background:'#d32
+                    <button onClick={() => executeDelete(item.id)} style={{background:'#d32f2f', color:'white', border:'none', borderRadius:'4px', padding:'4px 8px', cursor:'pointer', fontSize:'11px', fontWeight:'bold'}}>Yes</button>
+                    <button onClick={() => setDeleteConfirmId(null)} style={{background:'#ccc', color:'black', border:'none', borderRadius:'4px', padding:'4px 8px', cursor:'pointer', fontSize:'11px'}}>No</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <button onClick={() => findConnections(item)} style={{background:'none', border:'none', color: showRelatedFor===item.id ? '#0070f3' : '#999', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px', padding:0}}>🔗 <span style={{fontSize:'11px', fontWeight:'600'}}>Related</span></button>
+                  <div style={{display:'flex', gap:'12px'}}>
+                     <button onClick={() => startEditing(item)} title="Edit" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#999', padding:0}}>✏️</button>
+                     <button onClick={() => toggleArchive(item.id, item.is_archived)} title={item.is_archived ? "Unarchive" : "Archive"} style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color: item.is_archived ? '#0070f3' : '#999', padding:0}}> {item.is_archived ? '📥' : '✅'} </button>
+                     <button onClick={() => setDeleteConfirmId(item.id)} title="Delete" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#ff6b6b', padding:0}}>🗑</button>
+                  </div>
+                </>
+              )}
+            </div>
+            {showRelatedFor === item.id && (
+              <div style={{background:'#f0f7ff', padding:'8px 12px', borderTop:'1px solid #cfe2ff'}}>
+                {relatedItems.length === 0 ? <div style={{fontSize:'11px', color:'#666'}}>No matches found.</div> : (
+                  <div style={{display:'flex', flexDirection:'column', gap:'6px'}}>
+                    {relatedItems.map(r => ( <a key={r.id} href={r.url} target="_blank" style={{fontSize:'11px', textDecoration:'none', color:'#000', display:'block', lineHeight:'1.3'}}> ↳ {r.title} <span style={{color:'#888', fontSize:'10px'}}>({r.score})</span> </a> ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* --- FULLSCREEN BROWSER PREVIEW (Updated) --- */}
+      {reviewItem && (
+        <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'white', zIndex:2000, display:'flex', flexDirection:'column'}}>
+            
+            {/* 1. TOP BAR (Title + Summary) */}
+            <div style={{padding:'10px', background:'#f5f5f5', borderBottom:'1px solid #ddd', display:'flex', flexDirection:'column', gap:'5px'}}>
+               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                   <div style={{fontWeight:'bold', fontSize:'14px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'80%'}}>
+                       {reviewItem.title}
+                   </div>
+                   <button onClick={() => setReviewItem(null)} style={{border:'none', background:'none', fontSize:'18px', cursor:'pointer'}}>✕</button>
+               </div>
+               
+               {/* Summary Backup (For when Iframe fails) */}
+               {reviewItem.summary && (
+                   <div style={{fontSize:'12px', color:'#555', background:'#eef', padding:'5px 8px', borderRadius:'4px', lineHeight:'1.3'}}>
+                       {reviewItem.summary}
+                   </div>
+               )}
+            </div>
+
+            {/* 2. THE WEBSITE (IFRAME) */}
+            <div style={{flex:1, background:'#f0f0f0', position:'relative'}}>
+               {/* Note about blocking */}
+               <div style={{position:'absolute', top:'50%', left:'50%', transform:'translate(-50%, -50%)', color:'#999', fontSize:'13px', textAlign:'center', zIndex:0}}>
+                  Loading preview...<br/>
+                  (If blank, site blocks previews)
+               </div>
+               <iframe 
+                 src={reviewItem.url} 
+                 style={{width:'100%', height:'100%', border:'none', position:'relative', zIndex:1, background:'transparent'}} 
+                 title="Preview"
+               />
+            </div>
+            
+            {/* 3. BOTTOM ACTIONS (Keep / Delete) */}
+            <div style={{padding:'15px', background:'white', borderTop:'1px solid #ddd', display:'flex', gap:'10px'}}>
+               <button onClick={() => nextRandomItem(reviewItem.id)} style={{flex:1, padding:'15px', background:'#222', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontWeight:'bold', fontSize:'16px'}}>
+                 Keep ➡️
+               </button>
+               <button onClick={() => cleanupDelete(reviewItem.id)} style={{flex:1, padding:'15px', background:'#ffebee', color:'#d32f2f', border:'none', borderRadius:'12px', cursor:'pointer', fontWeight:'bold', fontSize:'16px'}}>
+                 Delete 🗑
+               </button>
+            </div>
+        </div>
+      )}
+    </div>
+  );
+}
