@@ -130,7 +130,9 @@ export default function Home() {
     const stopWords = ['the','is','a','an','and','or','for','to','in','of','with','at','from','by','on','how','what','why'];
     const getTokens = (str) => (!str ? [] : str.toLowerCase().replace(/[^\w\s]/g,'').split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w)));
     const targetTags = targetItem.tags ? targetItem.tags.toLowerCase().split(',').map(t=>t.trim()) : [];
+    const targetTagsList = targetItem.tags ? targetItem.tags.split(',').map(t=>t.trim()) : []; // Fixed logic
     const targetTokens = [...getTokens(targetItem.title), ...getTokens(targetItem.note)];
+    
     const scored = bookmarks.filter(b => b.id !== targetItem.id).map(b => {
         let score = 0;
         const bTags = b.tags ? b.tags.toLowerCase().split(',').map(t=>t.trim()) : [];
@@ -151,6 +153,7 @@ export default function Home() {
   }
   function startEditing(item) { setEditingId(item.id); setEditTags(item.tags || ''); setEditNote(item.note || ''); }
   function getHostname(url) { try { return new URL(url).hostname; } catch(e) { return ''; } }
+  function isTwitter(url) { return url && (url.includes('x.com') || url.includes('twitter.com')); }
 
   // 4. FILTERING
   const allTagsRaw = bookmarks.flatMap(item => item.tags ? item.tags.split(',') : []);
@@ -219,22 +222,46 @@ export default function Home() {
 
       {/* SEARCH & GRID */}
       <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="🔍 Find..." style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #eee', fontSize: '15px', marginBottom:'15px', background:'#fff' }} />
+      
+      {/* THE GRID (Cards) */}
       <div className="grid">
         {filteredBookmarks.map((item) => (
           <div key={item.id} className="card">
             <a href={item.url} target="_blank" style={{textDecoration:'none', color:'inherit', display:'block'}}>
+              
+              {/* CARD VISUALS */}
               <div className="card-image">
-                {item.image ? ( <img src={item.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> ) : (
+                {/* 1. TWITTER / X CARD */}
+                {isTwitter(item.url) ? (
+                   <div style={{height:'100%', padding:'15px', display:'flex', flexDirection:'column', justifyContent:'center', background:'#f8fbff', borderBottom:'1px solid #e1e8ed'}}>
+                      <div style={{fontSize:'11px', color:'#1d9bf0', fontWeight:'bold', marginBottom:'5px'}}>
+                         {item.title ? item.title.replace('Tweet by ', '@') : 'Twitter / X'}
+                      </div>
+                      <div style={{fontSize:'12px', color:'#333', lineHeight:'1.4', overflow:'hidden', display:'-webkit-box', WebkitLineClamp:4, WebkitBoxOrient:'vertical'}}>
+                         {item.summary || "Click to open tweet..."}
+                      </div>
+                   </div>
+                ) : 
+                /* 2. NORMAL IMAGE CARD */
+                item.image ? (
+                  <img src={item.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  /* 3. FAVICON FALLBACK */
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection:'column', gap:'5px' }}>
                      <img src={`https://www.google.com/s2/favicons?domain=${getHostname(item.url)}&sz=128`} style={{width:'48px', height:'48px', objectFit:'contain'}} onError={(e) => e.target.style.display='none'} />
                   </div>
                 )}
               </div>
+
               <div style={{ padding: '12px 12px 4px 12px' }}>
-                <h3 style={{ fontSize: '16px', margin: '0 0 4px 0', lineHeight:'1.3', fontWeight:'600' }}>{item.title || 'Untitled Link'}</h3>
+                <h3 style={{ fontSize: '16px', margin: '0 0 4px 0', lineHeight:'1.3', fontWeight:'600' }}>
+                   {isTwitter(item.url) ? "Tweet" : (item.title || 'Untitled Link')}
+                </h3>
                 <div style={{color:'#999', fontSize:'11px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{getHostname(item.url)}</div>
               </div>
             </a>
+
+            {/* CONTENT BODY */}
             <div style={{ padding: '0 12px 12px 12px', flex: 1 }}>
               {item.note && editingId !== item.id && ( <div style={{background:'#fff9db', padding:'6px 8px', borderRadius:'4px', fontSize:'12px', color:'#444', marginTop:'8px', borderLeft:'3px solid #fcc419', lineHeight:'1.4'}}>{item.note}</div> )}
               {editingId === item.id ? (
@@ -252,6 +279,8 @@ export default function Home() {
                 </div>
               )}
             </div>
+
+            {/* ACTION BAR */}
             <div style={{borderTop:'1px solid #f0f0f0', padding:'8px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fafafa', minHeight:'40px'}}>
               {deleteConfirmId === item.id ? (
                 <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', background:'#fff0f0', margin:'-8px -12px', padding:'8px 12px'}}>
@@ -285,64 +314,55 @@ export default function Home() {
         ))}
       </div>
 
-      {/* --- SMART CLEANUP MODE --- */}
+      {/* --- UNIVERSAL CARD CLEANUP MODE (No more blank screens) --- */}
       {reviewItem && (
         <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'white', zIndex:2000, display:'flex', flexDirection:'column'}}>
-            
-            {/* TOP BAR */}
+            {/* Top Bar */}
             <div style={{padding:'10px', background:'#f5f5f5', borderBottom:'1px solid #ddd', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <div style={{fontWeight:'bold', fontSize:'14px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'80%'}}>
-                    {reviewItem.title}
-                </div>
+                <div style={{fontWeight:'bold', fontSize:'14px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'80%'}}>{getHostname(reviewItem.url)}</div>
                 <button onClick={() => setReviewItem(null)} style={{border:'none', background:'none', fontSize:'18px', cursor:'pointer'}}>✕</button>
             </div>
+            
+            {/* The "Universal Reader Card" */}
+            <div style={{flex:1, background:'#f0f0f0', position:'relative', overflowY:'auto', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                <div style={{background:'white', padding:'30px', borderRadius:'16px', boxShadow:'0 5px 20px rgba(0,0,0,0.1)', maxWidth:'500px', width:'90%', maxHeight:'80vh', overflowY:'auto', display:'flex', flexDirection:'column', gap:'15px'}}>
+                   
+                   {/* Special Header for Twitter */}
+                   {isTwitter(reviewItem.url) && <div style={{fontSize:'14px', color:'#1d9bf0', fontWeight:'bold'}}>🐦 Tweet</div>}
+                   
+                   {/* Main Title */}
+                   <h2 style={{margin:0, fontSize:'22px', lineHeight:'1.3', color:'#111'}}>
+                      {isTwitter(reviewItem.url) ? (reviewItem.title.replace('Tweet by ', '@')) : (reviewItem.title || 'Untitled Link')}
+                   </h2>
+                   
+                   {/* Image (If exists and not Twitter) */}
+                   {!isTwitter(reviewItem.url) && reviewItem.image && (
+                      <img src={reviewItem.image} style={{width:'100%', borderRadius:'8px', maxHeight:'200px', objectFit:'cover'}} />
+                   )}
 
-            {/* CONTENT AREA */}
-            <div style={{flex:1, background:'#f0f0f0', position:'relative', overflow:'hidden'}}>
-               
-               {/* SMART TWITTER CARD (If URL is X/Twitter) */}
-               {(reviewItem.url.includes('x.com') || reviewItem.url.includes('twitter.com')) ? (
-                   <div style={{position:'absolute', top:0, left:0, right:0, bottom:0, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'}}>
-                      <div style={{background:'white', padding:'30px', borderRadius:'16px', boxShadow:'0 5px 20px rgba(0,0,0,0.1)', maxWidth:'500px', width:'100%'}}>
-                         <div style={{fontSize:'14px', color:'#888', marginBottom:'10px'}}>@{getHostname(reviewItem.url)}</div>
-                         {/* Display Author (from Title "Tweet by X") */}
-                         <h3 style={{fontSize:'22px', margin:'0 0 15px 0', color:'#1d9bf0'}}>{reviewItem.title.replace('Tweet by ', '')}</h3>
-                         {/* Display Content (from Summary) */}
-                         <p style={{fontSize:'18px', lineHeight:'1.5', color:'#111', whiteSpace:'pre-wrap'}}>{reviewItem.summary || "(No text found)"}</p>
-                         
-                         {reviewItem.note && (
-                            <div style={{marginTop:'20px', padding:'10px', background:'#fff9db', borderRadius:'8px', fontSize:'14px', borderLeft:'4px solid #fcc419'}}>
-                               My Note: {reviewItem.note}
-                            </div>
-                         )}
-                         <div style={{marginTop:'20px', fontSize:'12px', color:'#999'}}>
-                            This is a "Smart Card" reconstructed from your saved data.
-                         </div>
-                      </div>
+                   {/* The Summary / Text */}
+                   <div style={{fontSize:'16px', lineHeight:'1.6', color:'#333', whiteSpace:'pre-wrap'}}>
+                      {reviewItem.summary ? reviewItem.summary : <span style={{color:'#999', fontStyle:'italic'}}>No summary text available.</span>}
                    </div>
-               ) : (
-                   /* STANDARD IFRAME (For everything else) */
-                   <>
-                       <div style={{position:'absolute', top:'50%', left:'50%', transform:'translate(-50%, -50%)', color:'#999', fontSize:'13px', textAlign:'center', zIndex:0}}>
-                          Loading preview...<br/>(If blank, site blocks previews)
-                       </div>
-                       <iframe 
-                         src={reviewItem.url} 
-                         style={{width:'100%', height:'100%', border:'none', position:'relative', zIndex:1, background:'transparent'}} 
-                         title="Preview"
-                       />
-                   </>
-               )}
+                   
+                   {/* My Note */}
+                   {reviewItem.note && (
+                      <div style={{padding:'12px', background:'#fff9db', borderRadius:'8px', fontSize:'14px', borderLeft:'4px solid #fcc419'}}>
+                         <b>My Note:</b> {reviewItem.note}
+                      </div>
+                   )}
+                   
+                   {/* Link to actual site */}
+                   <a href={reviewItem.url} target="_blank" style={{display:'block', textAlign:'center', padding:'12px', background:'#f5f5f5', borderRadius:'8px', color:'#0070f3', textDecoration:'none', fontWeight:'bold', marginTop:'10px'}}>
+                      View Original Website ↗
+                   </a>
+                </div>
             </div>
             
-            {/* BOTTOM ACTIONS */}
+            {/* Bottom Actions */}
             <div style={{padding:'15px', background:'white', borderTop:'1px solid #ddd', display:'flex', gap:'10px'}}>
-               <button onClick={() => nextRandomItem(reviewItem.id)} style={{flex:1, padding:'15px', background:'#222', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontWeight:'bold', fontSize:'16px'}}>
-                 Keep ➡️
-               </button>
-               <button onClick={() => cleanupDelete(reviewItem.id)} style={{flex:1, padding:'15px', background:'#ffebee', color:'#d32f2f', border:'none', borderRadius:'12px', cursor:'pointer', fontWeight:'bold', fontSize:'16px'}}>
-                 Delete 🗑
-               </button>
+               <button onClick={() => nextRandomItem(reviewItem.id)} style={{flex:1, padding:'15px', background:'#222', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontWeight:'bold', fontSize:'16px'}}>Keep ➡️</button>
+               <button onClick={() => cleanupDelete(reviewItem.id)} style={{flex:1, padding:'15px', background:'#ffebee', color:'#d32f2f', border:'none', borderRadius:'12px', cursor:'pointer', fontWeight:'bold', fontSize:'16px'}}>Delete 🗑</button>
             </div>
         </div>
       )}
