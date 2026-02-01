@@ -29,7 +29,7 @@ export default function Home() {
   const [editNote, setEditNote] = useState('');
 
   // Features
-  const [reviewItem, setReviewItem] = useState(null); // The item currently in the "Popup"
+  const [reviewItem, setReviewItem] = useState(null);
   const [relatedItems, setRelatedItems] = useState([]);
   const [showRelatedFor, setShowRelatedFor] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -82,7 +82,6 @@ export default function Home() {
   }
 
   async function toggleArchive(id, currentStatus) {
-    // Optimistic update
     setBookmarks(bookmarks.map(b => b.id === id ? { ...b, is_archived: !currentStatus } : b));
     await fetch('/api/update', {
       method: 'POST',
@@ -93,7 +92,6 @@ export default function Home() {
   }
 
   async function executeDelete(id) {
-    // Normal delete from the list view
     await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, password }) });
     setDeleteConfirmId(null);
     handleLogin(null, password); 
@@ -110,31 +108,7 @@ export default function Home() {
     handleLogin(null, password);
   }
 
-  // 3. LOGIC ENGINES
-  function findConnections(targetItem) {
-    if (showRelatedFor === targetItem.id) { setShowRelatedFor(null); return; }
-    const stopWords = ['the','is','a','an','and','or','for','to','in','of','with','at','from','by','on','how','what','why'];
-    const getTokens = (str) => (!str ? [] : str.toLowerCase().replace(/[^\w\s]/g,'').split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w)));
-    
-    const targetTags = targetItem.tags ? targetItem.tags.toLowerCase().split(',').map(t=>t.trim()) : [];
-    const targetTokens = [...getTokens(targetItem.title), ...getTokens(targetItem.note)];
-
-    const scored = bookmarks.filter(b => b.id !== targetItem.id).map(b => {
-        let score = 0;
-        const bTags = b.tags ? b.tags.toLowerCase().split(',').map(t=>t.trim()) : [];
-        score += (bTags.filter(t => targetTags.includes(t)).length * 10);
-        const bTokens = [...getTokens(b.title), ...getTokens(b.note)];
-        score += (bTokens.filter(w => targetTokens.includes(w)).length * 3);
-        return { ...b, score };
-      }).filter(b => b.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
-
-    setRelatedItems(scored);
-    setShowRelatedFor(targetItem.id);
-  }
-
-  // --- CLEANUP MODE LOGIC ---
   function nextRandomItem(currentId = null) {
-    // Filter out archived items and the current one
     const candidates = bookmarks.filter(b => !b.is_archived && b.id !== currentId);
     if (candidates.length === 0) {
       setReviewItem(null);
@@ -151,6 +125,23 @@ export default function Home() {
   }
 
   // Helpers
+  function findConnections(targetItem) {
+    if (showRelatedFor === targetItem.id) { setShowRelatedFor(null); return; }
+    const stopWords = ['the','is','a','an','and','or','for','to','in','of','with','at','from','by','on','how','what','why'];
+    const getTokens = (str) => (!str ? [] : str.toLowerCase().replace(/[^\w\s]/g,'').split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w)));
+    const targetTags = targetItem.tags ? targetItem.tags.toLowerCase().split(',').map(t=>t.trim()) : [];
+    const targetTokens = [...getTokens(targetItem.title), ...getTokens(targetItem.note)];
+    const scored = bookmarks.filter(b => b.id !== targetItem.id).map(b => {
+        let score = 0;
+        const bTags = b.tags ? b.tags.toLowerCase().split(',').map(t=>t.trim()) : [];
+        score += (bTags.filter(t => targetTags.includes(t)).length * 10);
+        const bTokens = [...getTokens(b.title), ...getTokens(b.note)];
+        score += (bTokens.filter(w => targetTokens.includes(w)).length * 3);
+        return { ...b, score };
+      }).filter(b => b.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
+    setRelatedItems(scored);
+    setShowRelatedFor(targetItem.id);
+  }
   function processTags(str) { return str.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0).slice(0, 3).join(', '); }
   function toggleTag(tag) {
     let curr = tags.split(',').map(t => t.trim()).filter(Boolean);
@@ -164,12 +155,10 @@ export default function Home() {
   // 4. FILTERING
   const allTagsRaw = bookmarks.flatMap(item => item.tags ? item.tags.split(',') : []);
   const uniqueTags = [...new Set(allTagsRaw.map(t => t.trim().toLowerCase()))].sort();
-  
   const filteredBookmarks = bookmarks.filter(item => {
     const isArchived = item.is_archived === true; 
     if (activeTab === 'inbox' && isArchived) return false;
     if (activeTab === 'archive' && !isArchived) return false;
-
     const matchesTag = !activeTag || (item.tags && item.tags.toLowerCase().includes(activeTag.toLowerCase()));
     const q = searchQuery.toLowerCase();
     const matchesSearch = !q || (item.title?.toLowerCase().includes(q)) || (item.url?.toLowerCase().includes(q)) || (item.tags?.includes(q)) || (item.note?.toLowerCase().includes(q));
@@ -296,42 +285,57 @@ export default function Home() {
         ))}
       </div>
 
-      {/* --- FULLSCREEN BROWSER PREVIEW (Updated) --- */}
+      {/* --- SMART CLEANUP MODE --- */}
       {reviewItem && (
         <div style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'white', zIndex:2000, display:'flex', flexDirection:'column'}}>
             
-            {/* 1. TOP BAR (Title + Summary) */}
-            <div style={{padding:'10px', background:'#f5f5f5', borderBottom:'1px solid #ddd', display:'flex', flexDirection:'column', gap:'5px'}}>
-               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                   <div style={{fontWeight:'bold', fontSize:'14px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'80%'}}>
-                       {reviewItem.title}
-                   </div>
-                   <button onClick={() => setReviewItem(null)} style={{border:'none', background:'none', fontSize:'18px', cursor:'pointer'}}>✕</button>
-               </div>
-               
-               {/* Summary Backup (For when Iframe fails) */}
-               {reviewItem.summary && (
-                   <div style={{fontSize:'12px', color:'#555', background:'#eef', padding:'5px 8px', borderRadius:'4px', lineHeight:'1.3'}}>
-                       {reviewItem.summary}
-                   </div>
-               )}
+            {/* TOP BAR */}
+            <div style={{padding:'10px', background:'#f5f5f5', borderBottom:'1px solid #ddd', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <div style={{fontWeight:'bold', fontSize:'14px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'80%'}}>
+                    {reviewItem.title}
+                </div>
+                <button onClick={() => setReviewItem(null)} style={{border:'none', background:'none', fontSize:'18px', cursor:'pointer'}}>✕</button>
             </div>
 
-            {/* 2. THE WEBSITE (IFRAME) */}
-            <div style={{flex:1, background:'#f0f0f0', position:'relative'}}>
-               {/* Note about blocking */}
-               <div style={{position:'absolute', top:'50%', left:'50%', transform:'translate(-50%, -50%)', color:'#999', fontSize:'13px', textAlign:'center', zIndex:0}}>
-                  Loading preview...<br/>
-                  (If blank, site blocks previews)
-               </div>
-               <iframe 
-                 src={reviewItem.url} 
-                 style={{width:'100%', height:'100%', border:'none', position:'relative', zIndex:1, background:'transparent'}} 
-                 title="Preview"
-               />
+            {/* CONTENT AREA */}
+            <div style={{flex:1, background:'#f0f0f0', position:'relative', overflow:'hidden'}}>
+               
+               {/* SMART TWITTER CARD (If URL is X/Twitter) */}
+               {(reviewItem.url.includes('x.com') || reviewItem.url.includes('twitter.com')) ? (
+                   <div style={{position:'absolute', top:0, left:0, right:0, bottom:0, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'}}>
+                      <div style={{background:'white', padding:'30px', borderRadius:'16px', boxShadow:'0 5px 20px rgba(0,0,0,0.1)', maxWidth:'500px', width:'100%'}}>
+                         <div style={{fontSize:'14px', color:'#888', marginBottom:'10px'}}>@{getHostname(reviewItem.url)}</div>
+                         {/* Display Author (from Title "Tweet by X") */}
+                         <h3 style={{fontSize:'22px', margin:'0 0 15px 0', color:'#1d9bf0'}}>{reviewItem.title.replace('Tweet by ', '')}</h3>
+                         {/* Display Content (from Summary) */}
+                         <p style={{fontSize:'18px', lineHeight:'1.5', color:'#111', whiteSpace:'pre-wrap'}}>{reviewItem.summary || "(No text found)"}</p>
+                         
+                         {reviewItem.note && (
+                            <div style={{marginTop:'20px', padding:'10px', background:'#fff9db', borderRadius:'8px', fontSize:'14px', borderLeft:'4px solid #fcc419'}}>
+                               My Note: {reviewItem.note}
+                            </div>
+                         )}
+                         <div style={{marginTop:'20px', fontSize:'12px', color:'#999'}}>
+                            This is a "Smart Card" reconstructed from your saved data.
+                         </div>
+                      </div>
+                   </div>
+               ) : (
+                   /* STANDARD IFRAME (For everything else) */
+                   <>
+                       <div style={{position:'absolute', top:'50%', left:'50%', transform:'translate(-50%, -50%)', color:'#999', fontSize:'13px', textAlign:'center', zIndex:0}}>
+                          Loading preview...<br/>(If blank, site blocks previews)
+                       </div>
+                       <iframe 
+                         src={reviewItem.url} 
+                         style={{width:'100%', height:'100%', border:'none', position:'relative', zIndex:1, background:'transparent'}} 
+                         title="Preview"
+                       />
+                   </>
+               )}
             </div>
             
-            {/* 3. BOTTOM ACTIONS (Keep / Delete) */}
+            {/* BOTTOM ACTIONS */}
             <div style={{padding:'15px', background:'white', borderTop:'1px solid #ddd', display:'flex', gap:'10px'}}>
                <button onClick={() => nextRandomItem(reviewItem.id)} style={{flex:1, padding:'15px', background:'#222', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontWeight:'bold', fontSize:'16px'}}>
                  Keep ➡️
