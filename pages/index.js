@@ -349,7 +349,10 @@ export default function Home() {
                   {item.tags && item.tags.trim().length > 0 ? (
                     item.tags.split(',').map(t => <span key={t} style={{ backgroundColor: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', color: '#666', fontWeight:'500' }}>#{t.trim()}</span>)
                   ) : activeTab === 'inbox' && (() => {
-                    const suggestions = suggestTagsFor(item);
+                    const dbSuggestions = item.suggested_tags
+                      ? item.suggested_tags.split(',').map(t => t.trim()).filter(Boolean)
+                      : null;
+                    const suggestions = (dbSuggestions && dbSuggestions.length > 0) ? dbSuggestions : suggestTagsFor(item);
                     if (suggestions.length === 0) return null;
                     return <>
                       <span style={{fontSize:'10px', color:'#999'}}>Suggested:</span>
