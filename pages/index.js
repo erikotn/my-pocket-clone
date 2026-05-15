@@ -37,6 +37,7 @@ export default function Home() {
   const [expandedTriageId, setExpandedTriageId] = useState(null);
   const [backfillRunning, setBackfillRunning] = useState(false);
   const [backfillProcessed, setBackfillProcessed] = useState(0);
+  const [backfillRemaining, setBackfillRemaining] = useState(null);
 
   // 1. INITIALIZATION
   useEffect(() => {
@@ -109,6 +110,7 @@ export default function Home() {
   async function runBackfill() {
     setBackfillRunning(true);
     setBackfillProcessed(0);
+    setBackfillRemaining(null);
     let total = 0;
     let safety = 200;
     while (safety-- > 0) {
@@ -122,6 +124,7 @@ export default function Home() {
         if (json.error) { setMessage('❌ ' + json.error); break; }
         total += json.processed;
         setBackfillProcessed(total);
+        setBackfillRemaining(json.remaining);
         if (json.done || json.processed === 0) break;
       } catch (e) {
         setMessage('❌ Backfill failed: ' + e.message);
@@ -129,6 +132,7 @@ export default function Home() {
       }
     }
     setBackfillRunning(false);
+    setBackfillRemaining(null);
     handleLogin(null, password);
   }
 
@@ -295,14 +299,15 @@ export default function Home() {
 
       {/* BACKFILL BANNER */}
       {(() => {
-        const pendingCount = bookmarks.filter(b => !b.triage && !b.deleted_at).length;
-        if (pendingCount === 0 && !backfillRunning) return null;
+        const localPending = bookmarks.filter(b => !b.triage && !b.deleted_at).length;
+        const displayPending = backfillRunning && backfillRemaining !== null ? backfillRemaining : localPending;
+        if (displayPending === 0 && !backfillRunning) return null;
         return (
           <div style={{background:'#fff8e1', border:'1px solid #ffe082', borderRadius:'8px', padding:'10px 12px', marginBottom:'15px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'8px'}}>
             <span style={{fontSize:'13px', color:'#5d4037'}}>
               {backfillRunning
-                ? `🤖 Analyzing… ${backfillProcessed} done, ${pendingCount} pending`
-                : `🤖 ${pendingCount} ${pendingCount === 1 ? 'item zonder' : 'items zonder'} AI-analyse`}
+                ? `🤖 Analyzing… ${backfillProcessed} done, ${displayPending} pending`
+                : `🤖 ${displayPending} ${displayPending === 1 ? 'item zonder' : 'items zonder'} AI-analyse`}
             </span>
             <button
               onClick={runBackfill}
