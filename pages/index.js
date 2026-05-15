@@ -33,6 +33,7 @@ export default function Home() {
   const [relatedItems, setRelatedItems] = useState([]);
   const [showRelatedFor, setShowRelatedFor] = useState(null);
   const [lastOpenedId, setLastOpenedId] = useState(null);
+  const [showOnlyUntagged, setShowOnlyUntagged] = useState(false);
 
   // 1. INITIALIZATION
   useEffect(() => {
@@ -69,14 +70,15 @@ export default function Home() {
     setMessage('Saving...');
     try {
       const processedTags = processTags(tags);
+      const shouldArchive = processedTags.length > 0;
       const res = await fetch('/api/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ link: url, tags: processedTags, note, password }),
+        body: JSON.stringify({ link: url, tags: processedTags, note, password, is_archived: shouldArchive }),
       });
       const json = await res.json();
       if (json.error) setMessage('❌ ' + json.error);
-      else { setMessage('Saved!'); setUrl(''); setTags(''); setNote(''); handleLogin(null, password); }
+      else { setMessage(shouldArchive ? '✅ Saved & archived' : 'Saved!'); setUrl(''); setTags(''); setNote(''); handleLogin(null, password); }
     } catch (err) { setMessage('Failed to save.'); }
     setLoading(false);
   }
@@ -103,10 +105,12 @@ export default function Home() {
 
   async function saveEdit(id) {
     const processedTags = processTags(editTags);
+    const body = { id, tags: processedTags, note: editNote, password };
+    if (processedTags.length > 0) body.is_archived = true;
     await fetch('/api/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, tags: processedTags, note: editNote, password }),
+      body: JSON.stringify(body),
     });
     setEditingId(null);
     handleLogin(null, password);
@@ -165,14 +169,17 @@ export default function Home() {
   const filteredBookmarks = bookmarks.filter(item => {
     const isArchived = item.is_archived === true;
     const isDeleted = item.deleted_at != null;
+    const hasTags = item.tags && item.tags.trim().length > 0;
     if (activeTab === 'inbox' && (isArchived || isDeleted)) return false;
     if (activeTab === 'archive' && (!isArchived || isDeleted)) return false;
     if (activeTab === 'deleted' && !isDeleted) return false;
+    if (activeTab === 'archive' && showOnlyUntagged && hasTags) return false;
     const matchesTag = !activeTag || (item.tags && item.tags.toLowerCase().includes(activeTag.toLowerCase()));
     const q = searchQuery.toLowerCase();
     const matchesSearch = !q || (item.title?.toLowerCase().includes(q)) || (item.url?.toLowerCase().includes(q)) || (item.tags?.includes(q)) || (item.note?.toLowerCase().includes(q));
     return matchesTag && matchesSearch;
   });
+  const isStale = (item) => item.created_at && (Date.now() - new Date(item.created_at).getTime()) > 1000 * 60 * 60 * 24 * 183;
 
   if (!isLoggedIn) return <div style={{height:'100vh', display:'flex', alignItems:'center', justifyContent:'center'}}><form onSubmit={e => handleLogin(e, null)} style={{display:'flex', flexDirection:'column', gap:'10px'}}><h1>My Pocket 🔒</h1><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" style={{padding:'10px'}} /><button style={{padding:'10px'}}>Unlock</button></form></div>;
 
@@ -228,12 +235,22 @@ export default function Home() {
       )}
 
       {/* SEARCH & GRID */}
-      <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="🔍 Find..." style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #eee', fontSize: '15px', marginBottom:'15px', background:'#fff' }} />
+      <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="🔍 Find..." style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #eee', fontSize: '15px', marginBottom: activeTab==='archive' ? '8px' : '15px', background:'#fff' }} />
+      {activeTab === 'archive' && (
+        <div style={{display:'flex', gap:'6px', marginBottom:'15px'}}>
+          <button onClick={() => setShowOnlyUntagged(!showOnlyUntagged)} style={{padding:'4px 10px', borderRadius:'12px', border: showOnlyUntagged ? '1px solid #0070f3' : '1px solid #ddd', background: showOnlyUntagged ? '#0070f3' : 'white', color: showOnlyUntagged ? 'white' : '#666', fontSize:'12px', cursor:'pointer'}}>
+            {showOnlyUntagged ? '✓ ' : ''}Only untagged
+          </button>
+        </div>
+      )}
       
       {/* THE GRID (Cards) */}
       <div className="grid">
         {filteredBookmarks.map((item) => (
-          <div key={item.id} className="card" style={item.id === lastOpenedId ? {boxShadow:'0 0 0 2px #0070f3', borderColor:'#0070f3'} : undefined}>
+          <div key={item.id} className="card" style={{
+            ...(item.id === lastOpenedId ? {boxShadow:'0 0 0 2px #0070f3', borderColor:'#0070f3'} : {}),
+            ...(activeTab === 'archive' && isStale(item) ? {opacity: 0.65} : {})
+          }}>
             <a href={item.url} target="_blank" onClick={() => setLastOpenedId(item.id)} style={{textDecoration:'none', color:'inherit', display:'block'}}>
               
               {/* CARD VISUALS */}
@@ -264,7 +281,10 @@ export default function Home() {
                 <h3 style={{ fontSize: '16px', margin: '0 0 4px 0', lineHeight:'1.3', fontWeight:'600' }}>
                    {isTwitter(item.url) ? "Tweet" : (item.title || 'Untitled Link')}
                 </h3>
-                <div style={{color:'#999', fontSize:'11px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{getHostname(item.url)}</div>
+                <div style={{color:'#999', fontSize:'11px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'flex', alignItems:'center', gap:'6px'}}>
+                  <span style={{overflow:'hidden', textOverflow:'ellipsis'}}>{getHostname(item.url)}</span>
+                  {activeTab === 'archive' && isStale(item) && <span style={{background:'#fff3cd', color:'#856404', padding:'1px 5px', borderRadius:'3px', fontSize:'10px', fontWeight:'600', flexShrink:0}}>6m+</span>}
+                </div>
               </div>
             </a>
 

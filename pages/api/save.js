@@ -9,7 +9,7 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Only POST allowed');
 
-  const { link, tags, note, password } = req.body;
+  const { link, tags, note, password, is_archived } = req.body;
 
   if (password !== process.env.ADMIN_PASSWORD) {
     return res.status(401).json({ error: 'Wrong password!' });
@@ -65,7 +65,7 @@ export default async function handler(req, res) {
     // Save to Database
     const { data, error } = await supabase
       .from('bookmarks')
-      .insert([{ url: link, title, image, summary, tags, note }]);
+      .insert([{ url: link, title, image, summary, tags, note, is_archived: is_archived === true }]);
 
     if (error) throw error;
 
