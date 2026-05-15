@@ -159,6 +159,17 @@ export default function Home() {
     else { if (curr.length >= 3) return alert("Max 3"); curr.push(tag); }
     setTags(curr.join(', '));
   }
+  function selectTagSuggestion(suggested) {
+    const parts = tags.split(',');
+    const partial = parts[parts.length - 1].trim();
+    if (partial.length > 0) {
+      parts[parts.length - 1] = ' ' + suggested;
+      const cleaned = parts.map(t => t.trim()).filter(Boolean).slice(0, 3);
+      setTags(cleaned.join(', ') + (cleaned.length < 3 ? ', ' : ''));
+    } else {
+      toggleTag(suggested);
+    }
+  }
   function startEditing(item) { setEditingId(item.id); setEditTags(item.tags || ''); setEditNote(item.note || ''); }
   function getHostname(url) { try { return new URL(url).hostname; } catch(e) { return ''; } }
   function isTwitter(url) { return url && (url.includes('x.com') || url.includes('twitter.com')); }
@@ -166,6 +177,11 @@ export default function Home() {
   // 4. FILTERING
   const allTagsRaw = bookmarks.flatMap(item => item.tags ? item.tags.split(',') : []);
   const uniqueTags = [...new Set(allTagsRaw.map(t => t.trim().toLowerCase()))].sort();
+  const currentTagsList = tags.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
+  const tagPartial = (tags.split(',').pop() || '').trim().toLowerCase();
+  const suggestedTags = tagPartial.length > 0
+    ? uniqueTags.filter(t => t.startsWith(tagPartial) && !currentTagsList.slice(0, -1).includes(t))
+    : uniqueTags;
   const filteredBookmarks = bookmarks.filter(item => {
     const isArchived = item.is_archived === true;
     const isDeleted = item.deleted_at != null;
@@ -222,11 +238,11 @@ export default function Home() {
             </div>
             <button disabled={loading} style={{ padding: '0 20px', backgroundColor: 'black', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight:'bold', fontSize:'13px' }}>{loading ? '...' : 'Save'}</button>
           </form>
-          {uniqueTags.length > 0 && (
+          {suggestedTags.length > 0 && (
             <div style={{marginTop: '8px', display: 'flex', gap: '5px', flexWrap: 'wrap'}}>
-              {uniqueTags.map(tag => {
-                const isSelected = tags.includes(tag);
-                return <button key={tag} onClick={() => toggleTag(tag)} type="button" style={{padding: '3px 8px', borderRadius: '10px', border: isSelected ? '1px solid black' : '1px solid #ddd', backgroundColor: isSelected ? 'black' : 'white', color: isSelected ? 'white' : '#666', fontSize: '11px', cursor: 'pointer'}}>{tag}</button>
+              {suggestedTags.map(tag => {
+                const isSelected = currentTagsList.includes(tag);
+                return <button key={tag} onClick={() => selectTagSuggestion(tag)} type="button" style={{padding: '3px 8px', borderRadius: '10px', border: isSelected ? '1px solid black' : '1px solid #ddd', backgroundColor: isSelected ? 'black' : 'white', color: isSelected ? 'white' : '#666', fontSize: '11px', cursor: 'pointer'}}>{tag}</button>
               })}
             </div>
           )}
