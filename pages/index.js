@@ -35,6 +35,8 @@ export default function Home() {
   const [lastOpenedId, setLastOpenedId] = useState(null);
   const [showOnlyUntagged, setShowOnlyUntagged] = useState(false);
   const [expandedTriageId, setExpandedTriageId] = useState(null);
+  const [backfillRunning, setBackfillRunning] = useState(false);
+  const [backfillProcessed, setBackfillProcessed] = useState(0);
 
   // 1. INITIALIZATION
   useEffect(() => {
@@ -102,6 +104,32 @@ export default function Home() {
   async function restoreItem(id) {
     setBookmarks(prev => prev.map(b => b.id === id ? { ...b, deleted_at: null } : b));
     await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, deleted_at: null, password }) });
+  }
+
+  async function runBackfill() {
+    setBackfillRunning(true);
+    setBackfillProcessed(0);
+    let total = 0;
+    let safety = 200;
+    while (safety-- > 0) {
+      try {
+        const res = await fetch('/api/backfill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        });
+        const json = await res.json();
+        if (json.error) { setMessage('❌ ' + json.error); break; }
+        total += json.processed;
+        setBackfillProcessed(total);
+        if (json.done || json.processed === 0) break;
+      } catch (e) {
+        setMessage('❌ Backfill failed: ' + e.message);
+        break;
+      }
+    }
+    setBackfillRunning(false);
+    handleLogin(null, password);
   }
 
   async function saveEdit(id) {
@@ -264,6 +292,27 @@ export default function Home() {
            </div>
         </div>
       </div>
+
+      {/* BACKFILL BANNER */}
+      {(() => {
+        const pendingCount = bookmarks.filter(b => !b.triage && !b.deleted_at).length;
+        if (pendingCount === 0 && !backfillRunning) return null;
+        return (
+          <div style={{background:'#fff8e1', border:'1px solid #ffe082', borderRadius:'8px', padding:'10px 12px', marginBottom:'15px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'8px'}}>
+            <span style={{fontSize:'13px', color:'#5d4037'}}>
+              {backfillRunning
+                ? `🤖 Analyzing… ${backfillProcessed} done, ${pendingCount} pending`
+                : `🤖 ${pendingCount} ${pendingCount === 1 ? 'item zonder' : 'items zonder'} AI-analyse`}
+            </span>
+            <button
+              onClick={runBackfill}
+              disabled={backfillRunning}
+              style={{padding:'5px 12px', background: backfillRunning ? '#ccc' : '#5d4037', color:'white', border:'none', borderRadius:'6px', cursor: backfillRunning ? 'wait' : 'pointer', fontSize:'12px', fontWeight:'600'}}>
+              {backfillRunning ? 'Running…' : 'Run backfill'}
+            </button>
+          </div>
+        );
+      })()}
 
       {/* INPUT */}
       {(activeTab === 'inbox' || activeTab === 'archive') && (
