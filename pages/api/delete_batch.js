@@ -19,10 +19,10 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'No items selected' });
   }
 
-  // 2. Delete all items that match the list of IDs
+  // 2. Soft delete all items. Auto-purged after 7 days by /api/fetch.
   const { error } = await supabase
     .from('bookmarks')
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .in('id', ids);
 
   if (error) return res.status(500).json({ error: error.message });

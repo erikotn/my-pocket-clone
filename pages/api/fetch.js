@@ -16,10 +16,15 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Wrong password' });
   }
 
-  // 2. Fetch Data from Supabase
+  // 2. Purge items soft-deleted more than 7 days ago (lazy cleanup on each fetch).
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  await supabase.from('bookmarks').delete().lt('deleted_at', sevenDaysAgo);
+
+  // 3. Fetch active (non-deleted) data from Supabase
   const { data, error } = await supabase
     .from('bookmarks')
     .select('*')
+    .is('deleted_at', null)
     .order('id', { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });

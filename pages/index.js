@@ -32,7 +32,6 @@ export default function Home() {
   const [reviewItem, setReviewItem] = useState(null);
   const [relatedItems, setRelatedItems] = useState([]);
   const [showRelatedFor, setShowRelatedFor] = useState(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [lastOpenedId, setLastOpenedId] = useState(null);
 
   // 1. INITIALIZATION
@@ -93,9 +92,8 @@ export default function Home() {
   }
 
   async function executeDelete(id) {
+    setBookmarks(prev => prev.filter(b => b.id !== id));
     await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, password }) });
-    setDeleteConfirmId(null);
-    handleLogin(null, password); 
   }
 
   async function saveEdit(id) {
@@ -283,24 +281,12 @@ export default function Home() {
 
             {/* ACTION BAR */}
             <div style={{borderTop:'1px solid #f0f0f0', padding:'8px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fafafa', minHeight:'40px'}}>
-              {deleteConfirmId === item.id ? (
-                <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', background:'#fff0f0', margin:'-8px -12px', padding:'8px 12px'}}>
-                  <span style={{color:'#d32f2f', fontSize:'12px', fontWeight:'bold'}}>Delete?</span>
-                  <div style={{display:'flex', gap:'8px'}}>
-                    <button onClick={() => executeDelete(item.id)} style={{background:'#d32f2f', color:'white', border:'none', borderRadius:'4px', padding:'4px 8px', cursor:'pointer', fontSize:'11px', fontWeight:'bold'}}>Yes</button>
-                    <button onClick={() => setDeleteConfirmId(null)} style={{background:'#ccc', color:'black', border:'none', borderRadius:'4px', padding:'4px 8px', cursor:'pointer', fontSize:'11px'}}>No</button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <button onClick={() => findConnections(item)} style={{background:'none', border:'none', color: showRelatedFor===item.id ? '#0070f3' : '#999', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px', padding:0}}>🔗 <span style={{fontSize:'11px', fontWeight:'600'}}>Related</span></button>
-                  <div style={{display:'flex', gap:'12px'}}>
-                     <button onClick={() => startEditing(item)} title="Edit" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#999', padding:0}}>✏️</button>
-                     <button onClick={() => toggleArchive(item.id, item.is_archived)} title={item.is_archived ? "Unarchive" : "Archive"} style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color: item.is_archived ? '#0070f3' : '#999', padding:0}}> {item.is_archived ? '📥' : '✅'} </button>
-                     <button onClick={() => setDeleteConfirmId(item.id)} title="Delete" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#ff6b6b', padding:0}}>🗑</button>
-                  </div>
-                </>
-              )}
+              <button onClick={() => findConnections(item)} style={{background:'none', border:'none', color: showRelatedFor===item.id ? '#0070f3' : '#999', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px', padding:0}}>🔗 <span style={{fontSize:'11px', fontWeight:'600'}}>Related</span></button>
+              <div style={{display:'flex', gap:'12px'}}>
+                 <button onClick={() => startEditing(item)} title="Edit" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#999', padding:0}}>✏️</button>
+                 <button onClick={() => toggleArchive(item.id, item.is_archived)} title={item.is_archived ? "Unarchive" : "Archive"} style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color: item.is_archived ? '#0070f3' : '#999', padding:0}}> {item.is_archived ? '📥' : '✅'} </button>
+                 <button onClick={() => executeDelete(item.id)} title="Delete (7-day recovery in DB)" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#ff6b6b', padding:0}}>🗑</button>
+              </div>
             </div>
             {showRelatedFor === item.id && (
               <div style={{background:'#f0f7ff', padding:'8px 12px', borderTop:'1px solid #cfe2ff'}}>

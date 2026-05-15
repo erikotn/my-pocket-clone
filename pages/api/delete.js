@@ -15,10 +15,10 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Wrong password!' });
   }
 
-  // 2. If password is correct, delete from Supabase
+  // 2. Soft delete: mark with timestamp. Auto-purged after 7 days by /api/fetch.
   const { error } = await supabase
     .from('bookmarks')
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .eq('id', id);
 
   if (error) return res.status(500).json({ error: error.message });
