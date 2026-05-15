@@ -238,7 +238,7 @@ export default function Home() {
   function getHostname(url) { try { return new URL(url).hostname; } catch(e) { return ''; } }
   function isTwitter(url) { return url && (url.includes('x.com') || url.includes('twitter.com')); }
 
-  const TRIAGE_LABELS = { take: 'Inbouwen', partial: 'Deels', try: 'Uitproberen', skip: 'Overslaan' };
+  const TRIAGE_LABELS = { take: 'Bewaren', partial: 'Deels', try: 'Uitproberen', skip: 'Overslaan' };
   const TRIAGE_COLORS = {
     take:    { bg: '#d1fae5', fg: '#065f46', border: '#10b981' },
     partial: { bg: '#fef3c7', fg: '#92400e', border: '#f59e0b' },
