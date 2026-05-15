@@ -20,11 +20,10 @@ export default async function handler(req, res) {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   await supabase.from('bookmarks').delete().lt('deleted_at', sevenDaysAgo);
 
-  // 3. Fetch active (non-deleted) data from Supabase
+  // 3. Fetch all data (including soft-deleted; client filters per tab)
   const { data, error } = await supabase
     .from('bookmarks')
     .select('*')
-    .is('deleted_at', null)
     .order('id', { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });

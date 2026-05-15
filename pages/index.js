@@ -92,8 +92,13 @@ export default function Home() {
   }
 
   async function executeDelete(id) {
-    setBookmarks(prev => prev.filter(b => b.id !== id));
+    setBookmarks(prev => prev.map(b => b.id === id ? { ...b, deleted_at: new Date().toISOString() } : b));
     await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, password }) });
+  }
+
+  async function restoreItem(id) {
+    setBookmarks(prev => prev.map(b => b.id === id ? { ...b, deleted_at: null } : b));
+    await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, deleted_at: null, password }) });
   }
 
   async function saveEdit(id) {
@@ -108,7 +113,7 @@ export default function Home() {
   }
 
   function nextRandomItem(currentId = null) {
-    const candidates = bookmarks.filter(b => !b.is_archived && b.id !== currentId);
+    const candidates = bookmarks.filter(b => !b.is_archived && !b.deleted_at && b.id !== currentId);
     if (candidates.length === 0) {
       setReviewItem(null);
       return alert("No more inbox items to review!");
@@ -119,7 +124,7 @@ export default function Home() {
 
   async function cleanupDelete(id) {
     nextRandomItem(id);
-    setBookmarks(prev => prev.filter(b => b.id !== id));
+    setBookmarks(prev => prev.map(b => b.id === id ? { ...b, deleted_at: new Date().toISOString() } : b));
     await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, password }) });
   }
 
@@ -158,9 +163,11 @@ export default function Home() {
   const allTagsRaw = bookmarks.flatMap(item => item.tags ? item.tags.split(',') : []);
   const uniqueTags = [...new Set(allTagsRaw.map(t => t.trim().toLowerCase()))].sort();
   const filteredBookmarks = bookmarks.filter(item => {
-    const isArchived = item.is_archived === true; 
-    if (activeTab === 'inbox' && isArchived) return false;
-    if (activeTab === 'archive' && !isArchived) return false;
+    const isArchived = item.is_archived === true;
+    const isDeleted = item.deleted_at != null;
+    if (activeTab === 'inbox' && (isArchived || isDeleted)) return false;
+    if (activeTab === 'archive' && (!isArchived || isDeleted)) return false;
+    if (activeTab === 'deleted' && !isDeleted) return false;
     const matchesTag = !activeTag || (item.tags && item.tags.toLowerCase().includes(activeTag.toLowerCase()));
     const q = searchQuery.toLowerCase();
     const matchesSearch = !q || (item.title?.toLowerCase().includes(q)) || (item.url?.toLowerCase().includes(q)) || (item.tags?.includes(q)) || (item.note?.toLowerCase().includes(q));
@@ -192,6 +199,7 @@ export default function Home() {
            <div style={{background:'#f0f0f0', borderRadius:'20px', padding:'3px', display:'flex'}}>
               <button onClick={()=>setActiveTab('inbox')} style={{background: activeTab==='inbox' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='inbox'?'bold':'normal', boxShadow: activeTab==='inbox'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Inbox</button>
               <button onClick={()=>setActiveTab('archive')} style={{background: activeTab==='archive' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='archive'?'bold':'normal', boxShadow: activeTab==='archive'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Archive</button>
+              <button onClick={()=>setActiveTab('deleted')} style={{background: activeTab==='deleted' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='deleted'?'bold':'normal', boxShadow: activeTab==='deleted'?'0 1px 3px rgba(0,0,0,0.1)': 'none', color: activeTab==='deleted' ? '#d32f2f' : '#666'}}>Deleted</button>
            </div>
         </div>
       </div>
@@ -280,14 +288,23 @@ export default function Home() {
             </div>
 
             {/* ACTION BAR */}
-            <div style={{borderTop:'1px solid #f0f0f0', padding:'8px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fafafa', minHeight:'40px'}}>
-              <button onClick={() => findConnections(item)} style={{background:'none', border:'none', color: showRelatedFor===item.id ? '#0070f3' : '#999', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px', padding:0}}>🔗 <span style={{fontSize:'11px', fontWeight:'600'}}>Related</span></button>
-              <div style={{display:'flex', gap:'12px'}}>
-                 <button onClick={() => startEditing(item)} title="Edit" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#999', padding:0}}>✏️</button>
-                 <button onClick={() => toggleArchive(item.id, item.is_archived)} title={item.is_archived ? "Unarchive" : "Archive"} style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color: item.is_archived ? '#0070f3' : '#999', padding:0}}> {item.is_archived ? '📥' : '✅'} </button>
-                 <button onClick={() => executeDelete(item.id)} title="Delete (7-day recovery in DB)" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#ff6b6b', padding:0}}>🗑</button>
+            {item.deleted_at ? (
+              <div style={{borderTop:'1px solid #f0f0f0', padding:'8px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fff5f5', minHeight:'40px'}}>
+                <span style={{fontSize:'11px', color:'#999'}}>
+                  Removed in {Math.max(0, 7 - Math.floor((Date.now() - new Date(item.deleted_at).getTime()) / 86400000))}d
+                </span>
+                <button onClick={() => restoreItem(item.id)} title="Restore" style={{background:'none', border:'none', cursor:'pointer', fontSize:'13px', color:'#0070f3', fontWeight:'600', padding:0}}>↩️ Restore</button>
               </div>
-            </div>
+            ) : (
+              <div style={{borderTop:'1px solid #f0f0f0', padding:'8px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fafafa', minHeight:'40px'}}>
+                <button onClick={() => findConnections(item)} style={{background:'none', border:'none', color: showRelatedFor===item.id ? '#0070f3' : '#999', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px', padding:0}}>🔗 <span style={{fontSize:'11px', fontWeight:'600'}}>Related</span></button>
+                <div style={{display:'flex', gap:'12px'}}>
+                   <button onClick={() => startEditing(item)} title="Edit" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#999', padding:0}}>✏️</button>
+                   <button onClick={() => toggleArchive(item.id, item.is_archived)} title={item.is_archived ? "Unarchive" : "Archive"} style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color: item.is_archived ? '#0070f3' : '#999', padding:0}}> {item.is_archived ? '📥' : '✅'} </button>
+                   <button onClick={() => executeDelete(item.id)} title="Delete (7-day recovery in DB)" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#ff6b6b', padding:0}}>🗑</button>
+                </div>
+              </div>
+            )}
             {showRelatedFor === item.id && (
               <div style={{background:'#f0f7ff', padding:'8px 12px', borderTop:'1px solid #cfe2ff'}}>
                 {relatedItems.length === 0 ? <div style={{fontSize:'11px', color:'#666'}}>No matches found.</div> : (
