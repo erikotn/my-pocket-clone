@@ -174,6 +174,34 @@ export default function Home() {
   function getHostname(url) { try { return new URL(url).hostname; } catch(e) { return ''; } }
   function isTwitter(url) { return url && (url.includes('x.com') || url.includes('twitter.com')); }
 
+  function suggestTagsFor(item) {
+    const stopWords = ['the','is','a','an','and','or','for','to','in','of','with','at','from','by','on','how','what','why'];
+    const getTokens = (str) => (!str ? [] : str.toLowerCase().replace(/[^\w\s]/g,'').split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w)));
+    const targetTokens = [...getTokens(item.title), ...getTokens(item.summary), ...getTokens(item.note)];
+    if (targetTokens.length === 0) return [];
+    const tagScores = {};
+    bookmarks.forEach(b => {
+      if (b.id === item.id || !b.tags || b.tags.trim().length === 0) return;
+      const bTokens = [...getTokens(b.title), ...getTokens(b.summary), ...getTokens(b.note)];
+      const overlap = bTokens.filter(w => targetTokens.includes(w)).length;
+      if (overlap === 0) return;
+      b.tags.split(',').forEach(t => {
+        const tag = t.trim().toLowerCase();
+        if (tag) tagScores[tag] = (tagScores[tag] || 0) + overlap;
+      });
+    });
+    return Object.entries(tagScores).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t]) => t);
+  }
+
+  async function quickTag(id, tag) {
+    setBookmarks(prev => prev.map(b => b.id === id ? { ...b, tags: tag, is_archived: true } : b));
+    await fetch('/api/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, tags: tag, is_archived: true, password }),
+    });
+  }
+
   // 4. FILTERING
   const allTagsRaw = bookmarks.flatMap(item => item.tags ? item.tags.split(',') : []);
   const uniqueTags = [...new Set(allTagsRaw.map(t => t.trim().toLowerCase()))].sort();
@@ -317,8 +345,19 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                <div style={{ marginTop: '8px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                  {item.tags && item.tags.split(',').map(t => <span key={t} style={{ backgroundColor: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', color: '#666', fontWeight:'500' }}>#{t.trim()}</span>)}
+                <div style={{ marginTop: '8px', display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {item.tags && item.tags.trim().length > 0 ? (
+                    item.tags.split(',').map(t => <span key={t} style={{ backgroundColor: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', color: '#666', fontWeight:'500' }}>#{t.trim()}</span>)
+                  ) : activeTab === 'inbox' && (() => {
+                    const suggestions = suggestTagsFor(item);
+                    if (suggestions.length === 0) return null;
+                    return <>
+                      <span style={{fontSize:'10px', color:'#999'}}>Suggested:</span>
+                      {suggestions.map(t => (
+                        <button key={t} onClick={() => quickTag(item.id, t)} style={{padding:'2px 6px', borderRadius:'10px', border:'1px dashed #0070f3', background:'#f0f7ff', color:'#0070f3', fontSize:'10px', cursor:'pointer'}}>+ {t}</button>
+                      ))}
+                    </>;
+                  })()}
                 </div>
               )}
             </div>
