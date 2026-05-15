@@ -337,8 +337,8 @@ export default function Home() {
               {item.note && editingId !== item.id && ( <div style={{background:'#fff9db', padding:'6px 8px', borderRadius:'4px', fontSize:'12px', color:'#444', marginTop:'8px', borderLeft:'3px solid #fcc419', lineHeight:'1.4'}}>{item.note}</div> )}
               {editingId === item.id ? (
                 <div style={{marginTop:'10px', padding:'10px', background:'#f9f9f9', borderRadius:'8px'}}>
-                  <input value={editTags} onChange={e => setEditTags(e.target.value)} style={{width:'100%', padding:'6px', marginBottom:'5px', border:'1px solid #ddd', borderRadius:'4px', fontSize:'13px'}} placeholder="Tags" />
-                  <input value={editNote} onChange={e => setEditNote(e.target.value)} style={{width:'100%', padding:'6px', marginBottom:'5px', border:'1px solid #ddd', borderRadius:'4px', fontSize:'13px'}} placeholder="Note" />
+                  <input value={editTags} onChange={e => setEditTags(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(item.id); } }} style={{width:'100%', padding:'6px', marginBottom:'5px', border:'1px solid #ddd', borderRadius:'4px', fontSize:'13px'}} placeholder="Tags" />
+                  <input value={editNote} onChange={e => setEditNote(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(item.id); } }} style={{width:'100%', padding:'6px', marginBottom:'5px', border:'1px solid #ddd', borderRadius:'4px', fontSize:'13px'}} placeholder="Note" />
                   <div style={{display:'flex', gap:'5px'}}>
                     <button onClick={() => saveEdit(item.id)} style={{flex:1, background:'black', color:'white', border:'none', padding:'6px', borderRadius:'4px', cursor:'pointer', fontSize:'12px'}}>Save</button>
                     <button onClick={() => setEditingId(null)} style={{flex:1, background:'#ddd', border:'none', padding:'6px', borderRadius:'4px', cursor:'pointer', fontSize:'12px'}}>Cancel</button>
