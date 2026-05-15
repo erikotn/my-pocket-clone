@@ -33,6 +33,7 @@ export default function Home() {
   const [relatedItems, setRelatedItems] = useState([]);
   const [showRelatedFor, setShowRelatedFor] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [lastOpenedId, setLastOpenedId] = useState(null);
 
   // 1. INITIALIZATION
   useEffect(() => {
@@ -226,8 +227,8 @@ export default function Home() {
       {/* THE GRID (Cards) */}
       <div className="grid">
         {filteredBookmarks.map((item) => (
-          <div key={item.id} className="card">
-            <a href={item.url} target="_blank" style={{textDecoration:'none', color:'inherit', display:'block'}}>
+          <div key={item.id} className="card" style={item.id === lastOpenedId ? {boxShadow:'0 0 0 2px #0070f3', borderColor:'#0070f3'} : undefined}>
+            <a href={item.url} target="_blank" onClick={() => setLastOpenedId(item.id)} style={{textDecoration:'none', color:'inherit', display:'block'}}>
               
               {/* CARD VISUALS */}
               <div className="card-image">
