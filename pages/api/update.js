@@ -8,8 +8,8 @@ const supabase = createClient(
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Only POST allowed');
 
-  // Now accepts is_archived, note, tags, deleted_at, etc.
-  const { id, tags, note, is_archived, deleted_at, password } = req.body;
+  // Now accepts is_archived, note, tags, deleted_at, triage, etc.
+  const { id, tags, note, is_archived, deleted_at, triage, password } = req.body;
 
   if (password !== process.env.ADMIN_PASSWORD) {
     return res.status(401).json({ error: 'Wrong password!' });
@@ -21,6 +21,7 @@ export default async function handler(req, res) {
   if (note !== undefined) updates.note = note;
   if (is_archived !== undefined) updates.is_archived = is_archived;
   if (deleted_at !== undefined) updates.deleted_at = deleted_at;
+  if (triage !== undefined) updates.triage = triage;
 
   const { error } = await supabase
     .from('bookmarks')

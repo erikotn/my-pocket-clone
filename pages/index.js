@@ -107,6 +107,37 @@ export default function Home() {
     await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, deleted_at: null, password }) });
   }
 
+  async function overrideVerdict(item, newVerdict) {
+    const newTriage = { ...(item.triage || {}), verdict: newVerdict, user_set: true };
+    setBookmarks(prev => prev.map(b => b.id === item.id ? { ...b, triage: newTriage } : b));
+    await fetch('/api/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: item.id, triage: newTriage, password }),
+    });
+  }
+
+  const [reanalyzingId, setReanalyzingId] = useState(null);
+  async function reAnalyze(id) {
+    setReanalyzingId(id);
+    try {
+      const res = await fetch('/api/retriage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, password }),
+      });
+      const json = await res.json();
+      if (json.error) { setMessage('❌ ' + json.error); return; }
+      setBookmarks(prev => prev.map(b => b.id === id ? {
+        ...b,
+        triage: json.triage,
+        suggested_tags: json.suggested_tags ?? b.suggested_tags,
+      } : b));
+    } finally {
+      setReanalyzingId(null);
+    }
+  }
+
   async function runBackfill() {
     setBackfillRunning(true);
     setBackfillProcessed(0);
@@ -356,9 +387,27 @@ export default function Home() {
       <div className="grid">
         {filteredBookmarks.map((item) => (
           <div key={item.id} className="card" style={{
+            position: 'relative',
             ...(item.id === lastOpenedId ? {boxShadow:'0 0 0 2px #0070f3', borderColor:'#0070f3'} : {}),
             ...(activeTab === 'archive' && isStale(item) ? {opacity: 0.65} : {})
           }}>
+            {/* TRIAGE BADGE — top-left over image */}
+            {item.triage && !item.triage.failed && activeTab !== 'deleted' && (() => {
+              const v = item.triage.verdict;
+              const c = TRIAGE_COLORS[v] || TRIAGE_COLORS.skip;
+              const label = TRIAGE_LABELS[v] || v;
+              const priority = v === 'try' && item.triage.priority ? ' ' + item.triage.priority : '';
+              const expanded = expandedTriageId === item.id;
+              return (
+                <button
+                  onClick={() => setExpandedTriageId(expanded ? null : item.id)}
+                  style={{position:'absolute', top:'8px', left:'8px', zIndex:5, display:'inline-flex', alignItems:'center', gap:'4px', padding:'4px 9px', borderRadius:'12px', border:`1.5px solid ${c.border}`, background:'rgba(255,255,255,0.96)', color:c.fg, fontSize:'11px', fontWeight:'700', cursor:'pointer', boxShadow:'0 2px 8px rgba(0,0,0,0.18)', backdropFilter:'blur(2px)'}}>
+                  {label}{priority}
+                  {item.triage.user_set && <span style={{opacity:0.5, fontSize:'9px', marginLeft:'2px'}}>✎</span>}
+                  <span style={{opacity:0.6, fontSize:'9px'}}>{expanded ? '▴' : '▾'}</span>
+                </button>
+              );
+            })()}
             <a href={item.url} target="_blank" onClick={() => setLastOpenedId(item.id)} style={{textDecoration:'none', color:'inherit', display:'block'}}>
               
               {/* CARD VISUALS */}
@@ -396,30 +445,30 @@ export default function Home() {
               </div>
             </a>
 
-            {/* TRIAGE BADGE */}
-            {item.triage && !item.triage.failed && activeTab !== 'deleted' && (() => {
+            {/* TRIAGE EXPANDED PANEL */}
+            {item.triage && !item.triage.failed && expandedTriageId === item.id && activeTab !== 'deleted' && (() => {
               const v = item.triage.verdict;
               const c = TRIAGE_COLORS[v] || TRIAGE_COLORS.skip;
-              const label = TRIAGE_LABELS[v] || v;
-              const priority = v === 'try' && item.triage.priority ? ' ' + item.triage.priority : '';
-              const expanded = expandedTriageId === item.id;
               return (
-                <div style={{padding:'8px 12px 0 12px'}}>
-                  <button
-                    onClick={() => setExpandedTriageId(expanded ? null : item.id)}
-                    style={{display:'inline-flex', alignItems:'center', gap:'4px', padding:'3px 8px', borderRadius:'10px', border:`1px solid ${c.border}`, background:c.bg, color:c.fg, fontSize:'11px', fontWeight:'600', cursor:'pointer'}}>
-                    {label}{priority}
-                    <span style={{opacity:0.6, fontSize:'9px'}}>{expanded ? '▴' : '▾'}</span>
-                  </button>
-                  {expanded && (
-                    <div style={{marginTop:'6px', padding:'8px 10px', background:c.bg, borderRadius:'6px', fontSize:'12px', color:'#333', lineHeight:'1.4'}}>
-                      <div>{item.triage.reasoning}</div>
-                      {item.triage.action && <div style={{marginTop:'6px'}}><b>Actie:</b> {item.triage.action}</div>}
-                      {item.triage.follow_advice && (
-                        <div style={{marginTop:'6px'}}><b>Account:</b> {FOLLOW_LABELS[item.triage.follow_advice] || item.triage.follow_advice}</div>
-                      )}
-                    </div>
+                <div style={{margin:'8px 12px 0 12px', padding:'10px', background:c.bg, borderRadius:'6px', fontSize:'12px', color:'#333', lineHeight:'1.4', border:`1px solid ${c.border}`}}>
+                  <div>{item.triage.reasoning}</div>
+                  {item.triage.action && <div style={{marginTop:'6px'}}><b>Actie:</b> {item.triage.action}</div>}
+                  {item.triage.follow_advice && (
+                    <div style={{marginTop:'6px'}}><b>Account:</b> {FOLLOW_LABELS[item.triage.follow_advice] || item.triage.follow_advice}</div>
                   )}
+                  <div style={{marginTop:'10px', paddingTop:'8px', borderTop:'1px solid rgba(0,0,0,0.1)', display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center'}}>
+                    <span style={{fontSize:'10px', color:'#666', marginRight:'2px'}}>Wijzig:</span>
+                    {['take','partial','try','skip'].map(verdictKey => (
+                      <button key={verdictKey} onClick={() => overrideVerdict(item, verdictKey)}
+                        style={{padding:'2px 7px', borderRadius:'10px', border: v===verdictKey ? `1.5px solid ${TRIAGE_COLORS[verdictKey].border}` : '1px solid #ccc', background: v===verdictKey ? TRIAGE_COLORS[verdictKey].bg : 'white', color: TRIAGE_COLORS[verdictKey].fg, fontSize:'10px', fontWeight: v===verdictKey?'700':'500', cursor:'pointer'}}>
+                        {TRIAGE_LABELS[verdictKey]}
+                      </button>
+                    ))}
+                    <button onClick={() => reAnalyze(item.id)} disabled={reanalyzingId === item.id}
+                      style={{padding:'2px 7px', borderRadius:'10px', border:'1px solid #999', background:'white', color:'#666', fontSize:'10px', cursor: reanalyzingId === item.id ? 'wait' : 'pointer', marginLeft:'auto'}}>
+                      {reanalyzingId === item.id ? '…' : '↻ Re-analyze'}
+                    </button>
+                  </div>
                 </div>
               );
             })()}
