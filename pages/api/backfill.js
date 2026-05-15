@@ -63,7 +63,10 @@ export default async function handler(req, res) {
       }),
     ]);
 
-    const updates = { triage };
+    // Sentinel for failed analyses so they don't get retried forever.
+    // To retry: UPDATE bookmarks SET triage = NULL WHERE triage->>'failed' = 'true';
+    const triageValue = triage || { failed: true, at: new Date().toISOString() };
+    const updates = { triage: triageValue };
     if (!userHasTags && suggested_tags) updates.suggested_tags = suggested_tags;
 
     await supabase.from('bookmarks').update(updates).eq('id', item.id);

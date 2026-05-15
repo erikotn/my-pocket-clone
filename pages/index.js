@@ -392,7 +392,7 @@ export default function Home() {
             </a>
 
             {/* TRIAGE BADGE */}
-            {item.triage && activeTab !== 'deleted' && (() => {
+            {item.triage && !item.triage.failed && activeTab !== 'deleted' && (() => {
               const v = item.triage.verdict;
               const c = TRIAGE_COLORS[v] || TRIAGE_COLORS.skip;
               const label = TRIAGE_LABELS[v] || v;
