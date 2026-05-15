@@ -1,10 +1,67 @@
 import { createClient } from '@supabase/supabase-js';
 import * as cheerio from 'cheerio';
+import { TRIAGE_CONTEXT } from '../../lib/triage-context';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
+
+async function triageLink({ url, title, summary, body, note }) {
+  if (!process.env.OPENROUTER_API_KEY) return null;
+  const isTwitter = url.includes('x.com') || url.includes('twitter.com');
+  const userPrompt = `Beoordeel deze link.
+
+URL: ${url}
+Titel: ${title || '(none)'}
+Samenvatting: ${summary || '(none)'}
+${note ? `Erik's notitie: ${note}\n` : ''}${body ? `Body excerpt:\n${body}` : ''}
+
+${isTwitter ? 'Dit is een X/Twitter-link — voeg ook een follow_advice toe voor het account.' : 'Dit is geen Twitter-link — laat follow_advice op null.'}
+
+Antwoord uitsluitend met JSON in dit exacte format:
+{
+  "verdict": "take" | "partial" | "try" | "skip",
+  "reasoning": "2-4 zinnen, direct, geen omhaal",
+  "priority": "⬆⬆" | "⬆" | "⬇" | "⬇⬇" | null,
+  "action": "beknopte volgende stap als verdict take of partial, anders null",
+  "follow_advice": "follow" | "maybe" | "unfollow" | null
+}
+
+priority alleen invullen bij verdict "try", anders null.`;
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-sonnet-4.5',
+        messages: [
+          { role: 'system', content: TRIAGE_CONTEXT },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: { type: 'json_object' },
+        max_tokens: 600,
+      }),
+    });
+    if (!response.ok) {
+      console.error('Triage OpenRouter status', response.status, await response.text());
+      return null;
+    }
+    const json = await response.json();
+    const content = json.choices?.[0]?.message?.content;
+    if (!content) return null;
+    const parsed = JSON.parse(content);
+    if (!['take', 'partial', 'try', 'skip'].includes(parsed.verdict)) return null;
+    return parsed;
+  } catch (e) {
+    console.error('Triage failed:', e);
+    return null;
+  }
+}
 
 async function suggestTagsLLM({ title, summary, body, note, existingTags }) {
   if (!process.env.OPENROUTER_API_KEY) return null;
@@ -111,31 +168,32 @@ export default async function handler(req, res) {
       }
     }
 
-    // --- 3. TAG SUGGESTION (only when user didn't provide tags) ---
-    let suggested_tags = null;
-    if (!tags || !String(tags).trim()) {
+    // --- 3. PARALLEL LLM CALLS: tag suggestions (Gemini Flash) + triage (Sonnet) ---
+    const userProvidedTags = tags && String(tags).trim().length > 0;
+    let uniqueTags = [];
+    if (!userProvidedTags) {
       const { data: tagRows } = await supabase
         .from('bookmarks')
         .select('tags')
         .not('tags', 'is', null);
-      const allTags = (tagRows || [])
-        .flatMap(b => (b.tags || '').split(',').map(t => t.trim().toLowerCase()))
-        .filter(Boolean);
-      const uniqueTags = [...new Set(allTags)].sort();
-
-      suggested_tags = await suggestTagsLLM({
-        title,
-        summary,
-        body: bodyText,
-        note,
-        existingTags: uniqueTags,
-      });
+      uniqueTags = [...new Set(
+        (tagRows || [])
+          .flatMap(b => (b.tags || '').split(',').map(t => t.trim().toLowerCase()))
+          .filter(Boolean)
+      )].sort();
     }
+
+    const [suggested_tags, triage] = await Promise.all([
+      userProvidedTags
+        ? Promise.resolve(null)
+        : suggestTagsLLM({ title, summary, body: bodyText, note, existingTags: uniqueTags }),
+      triageLink({ url: link, title, summary, body: bodyText, note }),
+    ]);
 
     // Save to Database
     const { data, error } = await supabase
       .from('bookmarks')
-      .insert([{ url: link, title, image, summary, tags, note, is_archived: is_archived === true, suggested_tags }]);
+      .insert([{ url: link, title, image, summary, tags, note, is_archived: is_archived === true, suggested_tags, triage }]);
 
     if (error) throw error;
 

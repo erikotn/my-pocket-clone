@@ -34,6 +34,7 @@ export default function Home() {
   const [showRelatedFor, setShowRelatedFor] = useState(null);
   const [lastOpenedId, setLastOpenedId] = useState(null);
   const [showOnlyUntagged, setShowOnlyUntagged] = useState(false);
+  const [expandedTriageId, setExpandedTriageId] = useState(null);
 
   // 1. INITIALIZATION
   useEffect(() => {
@@ -173,6 +174,15 @@ export default function Home() {
   function startEditing(item) { setEditingId(item.id); setEditTags(item.tags || ''); setEditNote(item.note || ''); }
   function getHostname(url) { try { return new URL(url).hostname; } catch(e) { return ''; } }
   function isTwitter(url) { return url && (url.includes('x.com') || url.includes('twitter.com')); }
+
+  const TRIAGE_LABELS = { take: 'Overnemen', partial: 'Deels', try: 'Uitproberen', skip: 'Overslaan' };
+  const TRIAGE_COLORS = {
+    take:    { bg: '#d1fae5', fg: '#065f46', border: '#10b981' },
+    partial: { bg: '#fef3c7', fg: '#92400e', border: '#f59e0b' },
+    try:     { bg: '#dbeafe', fg: '#1e40af', border: '#0070f3' },
+    skip:    { bg: '#f3f4f6', fg: '#6b7280', border: '#9ca3af' },
+  };
+  const FOLLOW_LABELS = { follow: 'Volgen', maybe: 'Twijfel', unfollow: 'Ontvolgen' };
 
   function suggestTagsFor(item) {
     const stopWords = ['the','is','a','an','and','or','for','to','in','of','with','at','from','by','on','how','what','why'];
@@ -331,6 +341,34 @@ export default function Home() {
                 </div>
               </div>
             </a>
+
+            {/* TRIAGE BADGE */}
+            {item.triage && activeTab !== 'deleted' && (() => {
+              const v = item.triage.verdict;
+              const c = TRIAGE_COLORS[v] || TRIAGE_COLORS.skip;
+              const label = TRIAGE_LABELS[v] || v;
+              const priority = v === 'try' && item.triage.priority ? ' ' + item.triage.priority : '';
+              const expanded = expandedTriageId === item.id;
+              return (
+                <div style={{padding:'8px 12px 0 12px'}}>
+                  <button
+                    onClick={() => setExpandedTriageId(expanded ? null : item.id)}
+                    style={{display:'inline-flex', alignItems:'center', gap:'4px', padding:'3px 8px', borderRadius:'10px', border:`1px solid ${c.border}`, background:c.bg, color:c.fg, fontSize:'11px', fontWeight:'600', cursor:'pointer'}}>
+                    {label}{priority}
+                    <span style={{opacity:0.6, fontSize:'9px'}}>{expanded ? '▴' : '▾'}</span>
+                  </button>
+                  {expanded && (
+                    <div style={{marginTop:'6px', padding:'8px 10px', background:c.bg, borderRadius:'6px', fontSize:'12px', color:'#333', lineHeight:'1.4'}}>
+                      <div>{item.triage.reasoning}</div>
+                      {item.triage.action && <div style={{marginTop:'6px'}}><b>Actie:</b> {item.triage.action}</div>}
+                      {item.triage.follow_advice && (
+                        <div style={{marginTop:'6px'}}><b>Account:</b> {FOLLOW_LABELS[item.triage.follow_advice] || item.triage.follow_advice}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* CONTENT BODY */}
             <div style={{ padding: '0 12px 12px 12px', flex: 1 }}>
