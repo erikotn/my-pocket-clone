@@ -238,12 +238,13 @@ export default function Home() {
   function getHostname(url) { try { return new URL(url).hostname; } catch(e) { return ''; } }
   function isTwitter(url) { return url && (url.includes('x.com') || url.includes('twitter.com')); }
 
-  const TRIAGE_LABELS = { take: 'Bewaren', partial: 'Deels', try: 'Uitproberen', skip: 'Overslaan' };
+  const TRIAGE_LABELS = { take: 'Bewaren', partial: 'Deels', try: 'Uitproberen', skip: 'Overslaan', prive: 'Privé' };
   const TRIAGE_COLORS = {
     take:    { bg: '#d1fae5', fg: '#065f46', border: '#10b981' },
     partial: { bg: '#fef3c7', fg: '#92400e', border: '#f59e0b' },
     try:     { bg: '#dbeafe', fg: '#1e40af', border: '#0070f3' },
     skip:    { bg: '#f3f4f6', fg: '#6b7280', border: '#9ca3af' },
+    prive:   { bg: '#f3e8ff', fg: '#6b21a8', border: '#a855f7' },
   };
   const FOLLOW_LABELS = { follow: 'Volgen', maybe: 'Twijfel', unfollow: 'Ontvolgen' };
 
@@ -286,7 +287,11 @@ export default function Home() {
   const filteredBookmarks = bookmarks.filter(item => {
     const isArchived = item.is_archived === true;
     const isDeleted = item.deleted_at != null;
+    const isPrive = item.triage?.verdict === 'prive';
     const hasTags = item.tags && item.tags.trim().length > 0;
+    // Privé-items leven in eigen tab; uit inbox/vault houden zodat werk-zicht schoon blijft.
+    if (activeTab === 'prive' && (!isPrive || isDeleted)) return false;
+    if ((activeTab === 'inbox' || activeTab === 'archive') && isPrive) return false;
     if (activeTab === 'inbox' && (isArchived || isDeleted)) return false;
     if (activeTab === 'archive' && (!isArchived || isDeleted)) return false;
     if (activeTab === 'deleted' && !isDeleted) return false;
@@ -323,6 +328,7 @@ export default function Home() {
            <div style={{background:'#f0f0f0', borderRadius:'20px', padding:'3px', display:'flex'}}>
               <button onClick={()=>setActiveTab('inbox')} style={{background: activeTab==='inbox' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='inbox'?'bold':'normal', boxShadow: activeTab==='inbox'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Inbox</button>
               <button onClick={()=>setActiveTab('archive')} style={{background: activeTab==='archive' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='archive'?'bold':'normal', boxShadow: activeTab==='archive'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Vault</button>
+              <button onClick={()=>setActiveTab('prive')} style={{background: activeTab==='prive' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='prive'?'bold':'normal', boxShadow: activeTab==='prive'?'0 1px 3px rgba(0,0,0,0.1)': 'none', color: activeTab==='prive' ? '#6b21a8' : '#666'}}>Privé</button>
               <button onClick={()=>setActiveTab('deleted')} style={{background: activeTab==='deleted' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='deleted'?'bold':'normal', boxShadow: activeTab==='deleted'?'0 1px 3px rgba(0,0,0,0.1)': 'none', color: activeTab==='deleted' ? '#d32f2f' : '#666'}}>Deleted</button>
            </div>
         </div>
@@ -351,7 +357,7 @@ export default function Home() {
       })()}
 
       {/* INPUT */}
-      {(activeTab === 'inbox' || activeTab === 'archive') && (
+      {(activeTab === 'inbox' || activeTab === 'archive' || activeTab === 'prive') && (
         <div style={{ backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
           <form onSubmit={handleSave} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste link..." required style={{ flex: 2, minWidth: '180px', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize:'15px' }} />
@@ -458,7 +464,7 @@ export default function Home() {
                   )}
                   <div style={{marginTop:'10px', paddingTop:'8px', borderTop:'1px solid rgba(0,0,0,0.1)', display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center'}}>
                     <span style={{fontSize:'10px', color:'#666', marginRight:'2px'}}>Wijzig:</span>
-                    {['take','partial','try','skip'].map(verdictKey => (
+                    {['take','partial','try','skip','prive'].map(verdictKey => (
                       <button key={verdictKey} onClick={() => overrideVerdict(item, verdictKey)}
                         style={{padding:'2px 7px', borderRadius:'10px', border: v===verdictKey ? `1.5px solid ${TRIAGE_COLORS[verdictKey].border}` : '1px solid #ccc', background: v===verdictKey ? TRIAGE_COLORS[verdictKey].bg : 'white', color: TRIAGE_COLORS[verdictKey].fg, fontSize:'10px', fontWeight: v===verdictKey?'700':'500', cursor:'pointer'}}>
                         {TRIAGE_LABELS[verdictKey]}
