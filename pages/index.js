@@ -303,6 +303,18 @@ export default function Home() {
   });
   const isStale = (item) => item.created_at && (Date.now() - new Date(item.created_at).getTime()) > 1000 * 60 * 60 * 24 * 183;
 
+  // Live counter per tab — herberekent automatisch zodra `bookmarks` verandert
+  const tabCounts = bookmarks.reduce((acc, item) => {
+    const isArchived = item.is_archived === true;
+    const isDeleted = item.deleted_at != null;
+    const isPrive = item.triage?.verdict === 'prive';
+    if (isDeleted) acc.deleted++;
+    else if (isPrive) acc.prive++;
+    else if (isArchived) acc.archive++;
+    else acc.inbox++;
+    return acc;
+  }, { inbox: 0, archive: 0, prive: 0, deleted: 0 });
+
   if (!isLoggedIn) return <div style={{height:'100vh', display:'flex', alignItems:'center', justifyContent:'center'}}><form onSubmit={e => handleLogin(e, null)} style={{display:'flex', flexDirection:'column', gap:'10px'}}><h1>My Pocket 🔒</h1><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" style={{padding:'10px'}} /><button style={{padding:'10px'}}>Unlock</button></form></div>;
 
   return (
@@ -326,10 +338,10 @@ export default function Home() {
         <div style={{display:'flex', gap:'8px'}}>
            <button onClick={() => nextRandomItem(null)} title="Cleanup Mode" style={{background:'#f0f0f0', border:'none', width:'36px', height:'36px', borderRadius:'50%', cursor:'pointer', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center'}}>🎲</button>
            <div style={{background:'#f0f0f0', borderRadius:'20px', padding:'3px', display:'flex'}}>
-              <button onClick={()=>setActiveTab('inbox')} style={{background: activeTab==='inbox' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='inbox'?'bold':'normal', boxShadow: activeTab==='inbox'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Inbox</button>
-              <button onClick={()=>setActiveTab('archive')} style={{background: activeTab==='archive' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='archive'?'bold':'normal', boxShadow: activeTab==='archive'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Vault</button>
-              <button onClick={()=>setActiveTab('prive')} style={{background: activeTab==='prive' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='prive'?'bold':'normal', boxShadow: activeTab==='prive'?'0 1px 3px rgba(0,0,0,0.1)': 'none', color: activeTab==='prive' ? '#6b21a8' : '#666'}}>Privé</button>
-              <button onClick={()=>setActiveTab('deleted')} style={{background: activeTab==='deleted' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='deleted'?'bold':'normal', boxShadow: activeTab==='deleted'?'0 1px 3px rgba(0,0,0,0.1)': 'none', color: activeTab==='deleted' ? '#d32f2f' : '#666'}}>Deleted</button>
+              <button onClick={()=>setActiveTab('inbox')} style={{background: activeTab==='inbox' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='inbox'?'bold':'normal', boxShadow: activeTab==='inbox'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Inbox <span style={{opacity:0.5, fontSize:'11px', marginLeft:'2px', fontWeight:'normal'}}>{tabCounts.inbox}</span></button>
+              <button onClick={()=>setActiveTab('archive')} style={{background: activeTab==='archive' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='archive'?'bold':'normal', boxShadow: activeTab==='archive'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Vault <span style={{opacity:0.5, fontSize:'11px', marginLeft:'2px', fontWeight:'normal'}}>{tabCounts.archive}</span></button>
+              <button onClick={()=>setActiveTab('prive')} style={{background: activeTab==='prive' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='prive'?'bold':'normal', boxShadow: activeTab==='prive'?'0 1px 3px rgba(0,0,0,0.1)': 'none', color: activeTab==='prive' ? '#6b21a8' : '#666'}}>Privé <span style={{opacity:0.5, fontSize:'11px', marginLeft:'2px', fontWeight:'normal'}}>{tabCounts.prive}</span></button>
+              <button onClick={()=>setActiveTab('deleted')} style={{background: activeTab==='deleted' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='deleted'?'bold':'normal', boxShadow: activeTab==='deleted'?'0 1px 3px rgba(0,0,0,0.1)': 'none', color: activeTab==='deleted' ? '#d32f2f' : '#666'}}>Deleted <span style={{opacity:0.5, fontSize:'11px', marginLeft:'2px', fontWeight:'normal'}}>{tabCounts.deleted}</span></button>
            </div>
         </div>
       </div>
