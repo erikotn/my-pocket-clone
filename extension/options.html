@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <title>My Pocket — Settings</title>
+  <style>
+    body {
+      font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #111;
+      padding: 16px;
+      min-width: 340px;
+      margin: 0;
+    }
+    h2 { margin: 0 0 12px 0; font-size: 16px; }
+    label { display: block; margin: 12px 0 4px; font-weight: 600; font-size: 12px; color: #444; }
+    input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-size: 13px;
+    }
+    input:focus { outline: none; border-color: #0070f3; }
+    .row { display: flex; gap: 8px; margin-top: 16px; }
+    button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    button.primary { background: black; color: white; }
+    button.secondary { background: #f0f0f0; color: #333; }
+    .status { margin-top: 12px; font-size: 12px; min-height: 1.4em; }
+    .status.ok { color: #10b981; }
+    .status.err { color: #ef4444; }
+    .status.info { color: #666; }
+    .hint { font-size: 11px; color: #888; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h2>My Pocket — Save (settings)</h2>
+
+  <label for="apiBase">App URL</label>
+  <input id="apiBase" type="url" placeholder="https://my-pocket-clone.vercel.app">
+  <div class="hint">Productie-URL van je my-pocket-clone Vercel deploy.</div>
+
+  <label for="password">Password</label>
+  <input id="password" type="password" placeholder="Hetzelfde wachtwoord als in de app">
+
+  <div class="row">
+    <button id="save" class="primary">Opslaan</button>
+    <button id="test" class="secondary">Test verbinding</button>
+  </div>
+
+  <div id="status" class="status"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "My Pocket — Save",
+  "version": "0.1.0",
+  "description": "Sla de huidige tab (of een link) in één klik op in je my-pocket-clone.",
+
+  "permissions": ["activeTab", "storage", "contextMenus"],
+
+  "host_permissions": [
+    "https://my-pocket-clone.vercel.app/*",
+    "https://my-pocket-clone-git-main-erikotn-gmailcoms-projects.vercel.app/*",
+    "https://*.vercel.app/*"
+  ],
+
+  "action": {
+    "default_title": "Sla deze pagina op in My Pocket",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  },
+
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}
