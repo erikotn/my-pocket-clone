@@ -3,7 +3,7 @@ import { triageLink, suggestTagsLLM } from '../../lib/llm';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 const BATCH_SIZE = 3; // tuned to stay under 10s Vercel Hobby limit
