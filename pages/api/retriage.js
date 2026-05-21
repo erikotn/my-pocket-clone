@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { triageLink, suggestTagsLLM } from '../../lib/llm';
+import { triageLink, suggestTagsLLM, fetchRecentOverrides } from '../../lib/llm';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -38,11 +38,13 @@ export default async function handler(req, res) {
     )].sort();
   }
 
+  const recentOverrides = await fetchRecentOverrides(supabase, 10);
+
   const [suggested_tags, triage] = await Promise.all([
     userHasTags
       ? Promise.resolve(null)
       : suggestTagsLLM({ title: item.title, summary: item.summary, body: '', note: item.note, existingTags }),
-    triageLink({ url: item.url, title: item.title, summary: item.summary, body: '', note: item.note }),
+    triageLink({ url: item.url, title: item.title, summary: item.summary, body: '', note: item.note, recentOverrides }),
   ]);
 
   if (!triage) {

@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import * as cheerio from 'cheerio';
-import { triageLink, suggestTagsLLM } from '../../lib/llm';
+import { triageLink, suggestTagsLLM, fetchRecentOverrides } from '../../lib/llm';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -81,11 +81,14 @@ export default async function handler(req, res) {
       )].sort();
     }
 
+    // Haal recente overrides op als kalibratie voor de triage-call (acuut leren)
+    const recentOverrides = await fetchRecentOverrides(supabase, 10);
+
     const [suggested_tags, triage] = await Promise.all([
       userProvidedTags
         ? Promise.resolve(null)
         : suggestTagsLLM({ title, summary, body: bodyText, note, existingTags: uniqueTags }),
-      triageLink({ url: link, title, summary, body: bodyText, note }),
+      triageLink({ url: link, title, summary, body: bodyText, note, recentOverrides }),
     ]);
 
     // Save to Database

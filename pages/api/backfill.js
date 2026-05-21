@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { triageLink, suggestTagsLLM } from '../../lib/llm';
+import { triageLink, suggestTagsLLM, fetchRecentOverrides } from '../../lib/llm';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -41,6 +41,10 @@ export default async function handler(req, res) {
       .filter(Boolean)
   )].sort();
 
+  // Eén keer overrides ophalen voor de hele batch — alle items in dezelfde run gebruiken
+  // dezelfde kalibratie-set
+  const recentOverrides = await fetchRecentOverrides(supabase, 10);
+
   // Process items in parallel
   await Promise.all(pending.map(async item => {
     const userHasTags = item.tags && item.tags.trim().length > 0;
@@ -60,6 +64,7 @@ export default async function handler(req, res) {
         summary: item.summary,
         body: '',
         note: item.note,
+        recentOverrides,
       }),
     ]);
 

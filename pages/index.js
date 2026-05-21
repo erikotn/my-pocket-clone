@@ -39,6 +39,12 @@ export default function Home() {
   const [backfillProcessed, setBackfillProcessed] = useState(0);
   const [backfillRemaining, setBackfillRemaining] = useState(null);
 
+  // Leer-feature
+  const [learnOpen, setLearnOpen] = useState(false);
+  const [learnLoading, setLearnLoading] = useState(false);
+  const [learnResult, setLearnResult] = useState(null); // { suggestions, overrides_count, notion_url }
+  const [learnError, setLearnError] = useState(null);
+
   // 1. INITIALIZATION
   useEffect(() => {
     const savedPass = localStorage.getItem('MY_POCKET_PASS');
@@ -108,7 +114,20 @@ export default function Home() {
   }
 
   async function overrideVerdict(item, newVerdict) {
-    const newTriage = { ...(item.triage || {}), verdict: newVerdict, user_set: true };
+    // Bewaar het oorspronkelijke LLM-oordeel — alleen de eerste keer dat een item wordt overruled,
+    // anders ben je elke volgende override aan het vergelijken met je eigen vorige correctie.
+    const wasAlreadyOverridden = item.triage?.user_set === true;
+    const newTriage = {
+      ...(item.triage || {}),
+      verdict: newVerdict,
+      user_set: true,
+      overridden_at: new Date().toISOString(),
+    };
+    if (!wasAlreadyOverridden && item.triage && !item.triage.failed) {
+      newTriage.original_verdict = item.triage.verdict;
+      newTriage.original_reasoning = item.triage.reasoning || null;
+      newTriage.original_priority = item.triage.priority || null;
+    }
     setBookmarks(prev => prev.map(b => b.id === item.id ? { ...b, triage: newTriage } : b));
     await fetch('/api/update', {
       method: 'POST',
@@ -135,6 +154,30 @@ export default function Home() {
       } : b));
     } finally {
       setReanalyzingId(null);
+    }
+  }
+
+  async function runLearn() {
+    setLearnOpen(true);
+    setLearnLoading(true);
+    setLearnError(null);
+    setLearnResult(null);
+    try {
+      const res = await fetch('/api/learn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        setLearnError(json.error || `HTTP ${res.status}`);
+      } else {
+        setLearnResult(json);
+      }
+    } catch (e) {
+      setLearnError(e.message);
+    } finally {
+      setLearnLoading(false);
     }
   }
 
@@ -336,6 +379,7 @@ export default function Home() {
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
         <h2 style={{margin:0, cursor:'pointer', fontSize:'20px'}} onClick={() => {setActiveTag(''); setSearchQuery('');}}>My Pocket</h2>
         <div style={{display:'flex', gap:'8px'}}>
+           <button onClick={runLearn} title="Leer van mijn overrides — krijg voorstellen voor Notion-aanvullingen" style={{background:'#f0f0f0', border:'none', width:'36px', height:'36px', borderRadius:'50%', cursor:'pointer', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center'}}>🧠</button>
            <button onClick={() => nextRandomItem(null)} title="Cleanup Mode" style={{background:'#f0f0f0', border:'none', width:'36px', height:'36px', borderRadius:'50%', cursor:'pointer', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center'}}>🎲</button>
            <div style={{background:'#f0f0f0', borderRadius:'20px', padding:'3px', display:'flex'}}>
               <button onClick={()=>setActiveTab('inbox')} style={{background: activeTab==='inbox' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='inbox'?'bold':'normal', boxShadow: activeTab==='inbox'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Inbox <span style={{opacity:0.5, fontSize:'11px', marginLeft:'2px', fontWeight:'normal'}}>{tabCounts.inbox}</span></button>
@@ -605,6 +649,53 @@ export default function Home() {
                <button onClick={() => nextRandomItem(reviewItem.id)} style={{flex:1, padding:'15px', background:'#222', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontWeight:'bold', fontSize:'16px'}}>Keep ➡️</button>
                <button onClick={() => cleanupDelete(reviewItem.id)} style={{flex:1, padding:'15px', background:'#ffebee', color:'#d32f2f', border:'none', borderRadius:'12px', cursor:'pointer', fontWeight:'bold', fontSize:'16px'}}>Delete 🗑</button>
             </div>
+        </div>
+      )}
+
+      {/* LEER-MODAL */}
+      {learnOpen && (
+        <div onClick={() => setLearnOpen(false)} style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.5)', zIndex:3000, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'}}>
+          <div onClick={e => e.stopPropagation()} style={{background:'white', borderRadius:'12px', maxWidth:'720px', width:'100%', maxHeight:'85vh', display:'flex', flexDirection:'column', boxShadow:'0 10px 40px rgba(0,0,0,0.2)'}}>
+            <div style={{padding:'16px 20px', borderBottom:'1px solid #eee', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <div>
+                <h2 style={{margin:0, fontSize:'18px'}}>🧠 Leer van mijn overrides</h2>
+                {learnResult && <div style={{fontSize:'12px', color:'#666', marginTop:'4px'}}>{learnResult.overrides_count} override{learnResult.overrides_count === 1 ? '' : 's'} geanalyseerd</div>}
+              </div>
+              <button onClick={() => setLearnOpen(false)} style={{background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#666'}}>✕</button>
+            </div>
+
+            <div style={{padding:'20px', overflowY:'auto', flex:1}}>
+              {learnLoading && (
+                <div style={{textAlign:'center', padding:'40px 20px', color:'#666'}}>
+                  <div style={{fontSize:'24px', marginBottom:'10px'}}>⏳</div>
+                  <div>Sonnet analyseert je overrides... (kan 10-20s duren)</div>
+                </div>
+              )}
+              {learnError && (
+                <div style={{background:'#fee', border:'1px solid #fcc', borderRadius:'8px', padding:'12px', color:'#c00', fontSize:'13px'}}>
+                  <b>Fout:</b> {learnError}
+                </div>
+              )}
+              {learnResult && !learnLoading && (
+                <div>
+                  <div style={{fontSize:'13px', color:'#555', lineHeight:'1.5', marginBottom:'12px'}}>
+                    Voorstellen om in je Notion-prompt te plakken. Lees ze, kies wat je wilt overnemen, plak in <a href={learnResult.notion_url} target="_blank" rel="noopener" style={{color:'#0070f3'}}>de Notion-pagina</a>. Wijzigingen worden binnen 5 min door de app opgepikt.
+                  </div>
+                  <pre style={{whiteSpace:'pre-wrap', wordBreak:'break-word', background:'#f9f9f9', border:'1px solid #eee', borderRadius:'8px', padding:'14px', fontSize:'13px', lineHeight:'1.5', color:'#222', fontFamily:'-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', margin:0}}>{learnResult.suggestions}</pre>
+                </div>
+              )}
+            </div>
+
+            {learnResult && !learnLoading && (
+              <div style={{padding:'12px 20px', borderTop:'1px solid #eee', display:'flex', gap:'10px', justifyContent:'flex-end'}}>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(learnResult.suggestions); setMessage('Suggesties gekopieerd'); setTimeout(() => setMessage(''), 2000); }}
+                  style={{padding:'8px 14px', background:'#f0f0f0', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'13px', fontWeight:600}}
+                >📋 Kopieer</button>
+                <a href={learnResult.notion_url} target="_blank" rel="noopener" style={{padding:'8px 14px', background:'black', color:'white', borderRadius:'6px', textDecoration:'none', fontSize:'13px', fontWeight:600, display:'inline-block'}}>Open Notion ↗</a>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
