@@ -6,6 +6,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// Deel van de bewaarde paginatekst dat de LLM meekrijgt.
+const LLM_BODY_CHARS = 2000;
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Only POST allowed');
 
@@ -17,7 +20,7 @@ export default async function handler(req, res) {
 
   const { data: item, error: fetchErr } = await supabase
     .from('bookmarks')
-    .select('id, url, title, summary, tags, note')
+    .select('id, url, title, summary, tags, note, content')
     .eq('id', id)
     .single();
   if (fetchErr) return res.status(500).json({ error: fetchErr.message });
@@ -39,12 +42,13 @@ export default async function handler(req, res) {
   }
 
   const recentOverrides = await fetchRecentOverrides(supabase, 10);
+  const body = (item.content || '').slice(0, LLM_BODY_CHARS);
 
   const [suggested_tags, triage] = await Promise.all([
     userHasTags
       ? Promise.resolve(null)
-      : suggestTagsLLM({ title: item.title, summary: item.summary, body: '', note: item.note, existingTags }),
-    triageLink({ url: item.url, title: item.title, summary: item.summary, body: '', note: item.note, recentOverrides }),
+      : suggestTagsLLM({ title: item.title, summary: item.summary, body, note: item.note, existingTags }),
+    triageLink({ url: item.url, title: item.title, summary: item.summary, body, note: item.note, recentOverrides }),
   ]);
 
   if (!triage) {

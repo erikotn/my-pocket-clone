@@ -6,6 +6,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// Deel van de bewaarde paginatekst dat de LLM meekrijgt.
+const LLM_BODY_CHARS = 2000;
+
 const BATCH_SIZE = 3; // tuned to stay under 10s Vercel Hobby limit
 
 export default async function handler(req, res) {
@@ -19,7 +22,7 @@ export default async function handler(req, res) {
   // Pending = no triage yet, not deleted
   const { data: pending, error: fetchErr } = await supabase
     .from('bookmarks')
-    .select('id, url, title, summary, tags, note')
+    .select('id, url, title, summary, tags, note, content')
     .is('triage', null)
     .is('deleted_at', null)
     .order('id', { ascending: false })
@@ -48,13 +51,14 @@ export default async function handler(req, res) {
   // Process items in parallel
   await Promise.all(pending.map(async item => {
     const userHasTags = item.tags && item.tags.trim().length > 0;
+    const body = (item.content || '').slice(0, LLM_BODY_CHARS);
     const [suggested_tags, triage] = await Promise.all([
       userHasTags
         ? Promise.resolve(null)
         : suggestTagsLLM({
             title: item.title,
             summary: item.summary,
-            body: '',
+            body,
             note: item.note,
             existingTags,
           }),
@@ -62,7 +66,7 @@ export default async function handler(req, res) {
         url: item.url,
         title: item.title,
         summary: item.summary,
-        body: '',
+        body,
         note: item.note,
         recentOverrides,
       }),

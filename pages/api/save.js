@@ -7,6 +7,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// Paginatekst wordt bewaard (link rot, zoeken, hertriëren zonder opnieuw ophalen).
+// De LLM krijgt alleen het begin ervan — ongewijzigd t.o.v. voorheen.
+const MAX_CONTENT_CHARS = 50000;
+const LLM_BODY_CHARS = 2000;
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Only POST allowed');
 
@@ -60,7 +65,7 @@ export default async function handler(req, res) {
         if (bodyText.length < 200) {
           bodyText = $('p').map((i, el) => $(el).text()).get().join(' ');
         }
-        bodyText = bodyText.replace(/\s+/g, ' ').trim().slice(0, 2000);
+        bodyText = bodyText.replace(/\s+/g, ' ').trim().slice(0, MAX_CONTENT_CHARS);
       } catch (e) {
         console.error('Scraping failed', e);
       }
@@ -84,17 +89,19 @@ export default async function handler(req, res) {
     // Haal recente overrides op als kalibratie voor de triage-call (acuut leren)
     const recentOverrides = await fetchRecentOverrides(supabase, 10);
 
+    const llmBody = bodyText.slice(0, LLM_BODY_CHARS);
+
     const [suggested_tags, triage] = await Promise.all([
       userProvidedTags
         ? Promise.resolve(null)
-        : suggestTagsLLM({ title, summary, body: bodyText, note, existingTags: uniqueTags }),
-      triageLink({ url: link, title, summary, body: bodyText, note, recentOverrides }),
+        : suggestTagsLLM({ title, summary, body: llmBody, note, existingTags: uniqueTags }),
+      triageLink({ url: link, title, summary, body: llmBody, note, recentOverrides }),
     ]);
 
     // Save to Database
     const { data, error } = await supabase
       .from('bookmarks')
-      .insert([{ url: link, title, image, summary, tags, note, is_archived: is_archived === true, suggested_tags, triage }]);
+      .insert([{ url: link, title, image, summary, tags, note, is_archived: is_archived === true, suggested_tags, triage, content: bodyText || null }]);
 
     if (error) throw error;
 
