@@ -157,6 +157,28 @@ export default function Home() {
     }
   }
 
+  async function deleteAllInView() {
+    const ids = filteredBookmarks.map(b => b.id);
+    if (ids.length === 0) return;
+    const tabLabel = activeTab === 'archive' ? 'Vault' : 'Privé';
+    if (!confirm(`Weet je het zeker? ${ids.length} ${ids.length === 1 ? 'item wordt' : 'items worden'} verplaatst naar Deleted (7 dagen terug te halen).`)) return;
+    const now = new Date().toISOString();
+    setBookmarks(prev => prev.map(b => ids.includes(b.id) ? { ...b, deleted_at: now } : b));
+    const res = await fetch('/api/delete_batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, password }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.error) {
+      setMessage(`❌ Bulk-delete faalde: ${json.error || res.status}`);
+      handleLogin(null, password); // refresh om de rollback te laten zien
+    } else {
+      setMessage(`✅ ${ids.length} ${tabLabel}-items verplaatst naar Deleted`);
+      setTimeout(() => setMessage(''), 3000);
+    }
+  }
+
   async function runLearn() {
     setLearnOpen(true);
     setLearnLoading(true);
@@ -438,9 +460,21 @@ export default function Home() {
       {/* SEARCH & GRID */}
       <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="🔍 Find..." style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #eee', fontSize: '15px', marginBottom: activeTab==='archive' ? '8px' : '15px', background:'#fff' }} />
       {activeTab === 'archive' && (
-        <div style={{display:'flex', gap:'6px', marginBottom:'15px'}}>
+        <div style={{display:'flex', gap:'6px', marginBottom:'15px', alignItems:'center'}}>
           <button onClick={() => setShowOnlyUntagged(!showOnlyUntagged)} style={{padding:'4px 10px', borderRadius:'12px', border: showOnlyUntagged ? '1px solid #0070f3' : '1px solid #ddd', background: showOnlyUntagged ? '#0070f3' : 'white', color: showOnlyUntagged ? 'white' : '#666', fontSize:'12px', cursor:'pointer'}}>
             {showOnlyUntagged ? '✓ ' : ''}Only untagged
+          </button>
+          <div style={{flex:1}} />
+          <button onClick={deleteAllInView} disabled={filteredBookmarks.length === 0} style={{padding:'4px 10px', borderRadius:'12px', border:'1px solid #fcc', background: filteredBookmarks.length === 0 ? '#fafafa' : '#fff5f5', color: filteredBookmarks.length === 0 ? '#ccc' : '#d32f2f', fontSize:'12px', cursor: filteredBookmarks.length === 0 ? 'default' : 'pointer', fontWeight:600}}>
+            🗑 Delete all ({filteredBookmarks.length})
+          </button>
+        </div>
+      )}
+      {activeTab === 'prive' && (
+        <div style={{display:'flex', gap:'6px', marginBottom:'15px', alignItems:'center'}}>
+          <div style={{flex:1}} />
+          <button onClick={deleteAllInView} disabled={filteredBookmarks.length === 0} style={{padding:'4px 10px', borderRadius:'12px', border:'1px solid #fcc', background: filteredBookmarks.length === 0 ? '#fafafa' : '#fff5f5', color: filteredBookmarks.length === 0 ? '#ccc' : '#d32f2f', fontSize:'12px', cursor: filteredBookmarks.length === 0 ? 'default' : 'pointer', fontWeight:600}}>
+            🗑 Delete all ({filteredBookmarks.length})
           </button>
         </div>
       )}
