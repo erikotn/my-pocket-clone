@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 
 export default function Home() {
   const router = useRouter();
+  const autoSavedRef = useRef(false); // voorkomt dubbel opslaan van dezelfde gedeelde link
   
   // --- STATE ---
   const [password, setPassword] = useState('');
@@ -59,10 +60,37 @@ export default function Home() {
     const sharedUrl = text || link; 
     if (sharedUrl) {
       const urlMatch = sharedUrl.match(/(https?:\/\/[^\s]+)/);
-      setUrl(urlMatch ? urlMatch[0] : sharedUrl);
+      const shared = urlMatch ? urlMatch[0] : sharedUrl;
       setActiveTab('inbox');
+      const savedPass = localStorage.getItem('MY_POCKET_PASS');
+      // Bekend apparaat: gedeelde link meteen opslaan (notitie/tags kunnen daarna in de lijst)
+      if (savedPass && !autoSavedRef.current) {
+        autoSavedRef.current = true;
+        router.replace('/', undefined, { shallow: true }); // verversen slaat de link niet nog eens op
+        autoSave(shared, savedPass);
+      } else if (!savedPass) {
+        setUrl(shared);
+      }
     }
   }, [router.isReady, router.query]);
+
+  async function autoSave(link, pass) {
+    setMessage('Opslaan…');
+    try {
+      const res = await fetch('/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ link, tags: '', note: '', password: pass, is_archived: false }),
+      });
+      const json = await res.json();
+      if (json.error) { setMessage('❌ ' + json.error); setUrl(link); return; }
+      setMessage('✅ Opgeslagen – notitie of tags kun je in de lijst toevoegen');
+      handleLogin(null, pass);
+      // Triage loopt op de achtergrond: lijst nog twee keer verversen tot het oordeel er staat
+      setTimeout(() => handleLogin(null, pass), 7000);
+      setTimeout(() => handleLogin(null, pass), 15000);
+    } catch (err) { setMessage('Opslaan mislukt.'); setUrl(link); }
+  }
 
   // 2. CORE ACTIONS
   async function handleLogin(e, passOverride) {
