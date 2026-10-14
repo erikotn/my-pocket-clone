@@ -48,7 +48,9 @@ export default function Home() {
   // 1. INITIALIZATION
   useEffect(() => {
     const savedPass = localStorage.getItem('MY_POCKET_PASS');
-    if (savedPass) { setPassword(savedPass); handleLogin(null, savedPass); }
+    // Bekend apparaat: direct het formulier tonen, de lijst laadt op de achtergrond.
+    // De server controleert het wachtwoord bij elke actie; klopt het niet, dan terug naar het inlogscherm.
+    if (savedPass) { setPassword(savedPass); setIsLoggedIn(true); handleLogin(null, savedPass); }
   }, []);
 
   useEffect(() => {
@@ -71,6 +73,7 @@ export default function Home() {
       const json = await res.json();
       if (!json.error) { setBookmarks(json.data || []); setIsLoggedIn(true); localStorage.setItem('MY_POCKET_PASS', passToUse); setMessage(''); }
       else if (!passOverride) alert('❌ ' + json.error);
+      else { setIsLoggedIn(false); localStorage.removeItem('MY_POCKET_PASS'); }
     } catch (err) { setMessage('Failed to connect.'); }
   }
 
