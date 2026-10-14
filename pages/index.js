@@ -88,7 +88,12 @@ export default function Home() {
       });
       const json = await res.json();
       if (json.error) setMessage('❌ ' + json.error);
-      else { setMessage(shouldArchive ? '✅ Saved & archived' : 'Saved!'); setUrl(''); setTags(''); setNote(''); handleLogin(null, password); }
+      else {
+        setMessage(shouldArchive ? '✅ Saved & archived' : 'Saved!'); setUrl(''); setTags(''); setNote(''); handleLogin(null, password);
+        // Triage loopt op de achtergrond: lijst nog twee keer verversen tot het oordeel er staat
+        setTimeout(() => handleLogin(null, password), 7000);
+        setTimeout(() => handleLogin(null, password), 15000);
+      }
     } catch (err) { setMessage('Failed to save.'); }
     setLoading(false);
   }

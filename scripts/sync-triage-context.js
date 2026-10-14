@@ -12,8 +12,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const NOTION_API_KEY = process.env.NOTION_API_KEY;
-const NOTION_PAGE_ID = process.env.NOTION_PAGE_ID;
+const NOTION_API_KEY = process.env.NOTION_API_KEY?.trim(); // env-waarden op Vercel eindigden op een newline
+const NOTION_PAGE_ID = process.env.NOTION_PAGE_ID?.trim();
 const TARGET = path.join(__dirname, '..', 'lib', 'triage-context.js');
 const START_MARKER = 'export const TRIAGE_CONTEXT = `';
 
