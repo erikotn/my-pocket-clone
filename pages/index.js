@@ -590,7 +590,7 @@ export default function Home() {
                 </button>
               );
             })()}
-            <a href={item.url} target="_blank" onClick={() => setLastOpenedId(item.id)} style={{textDecoration:'none', color:'inherit', display:'block'}}>
+            <a href={item.url} target="_blank" onClick={(e) => { if (e.detail > 1) { e.preventDefault(); return; } setLastOpenedId(item.id); }} style={{textDecoration:'none', color:'inherit', display:'block'}}>
               
               {/* CARD VISUALS */}
               <div className="card-image">
@@ -655,8 +655,11 @@ export default function Home() {
               );
             })()}
 
-            {/* CONTENT BODY */}
-            <div style={{ padding: '0 12px 12px 12px', flex: 1 }}>
+            {/* CONTENT BODY — dubbelklik op lege ruimte toggelt Secret-markering */}
+            <div
+              onDoubleClick={(e) => { if (e.target === e.currentTarget) toggleSecret(item); }}
+              title={isSecretItem(item) ? 'Dubbelklik op lege ruimte om terug uit Secret te halen' : 'Dubbelklik op lege ruimte om naar Secret te verplaatsen'}
+              style={{ padding: '0 12px 12px 12px', flex: 1 }}>
               {item.note && editingId !== item.id && ( <div style={{background:'#fff9db', padding:'6px 8px', borderRadius:'4px', fontSize:'12px', color:'#444', marginTop:'8px', borderLeft:'3px solid #fcc419', lineHeight:'1.4'}}>{item.note}</div> )}
               {editingId === item.id ? (
                 <div style={{marginTop:'10px', padding:'10px', background:'#f9f9f9', borderRadius:'8px'}}>
@@ -668,10 +671,7 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                <div
-                  onDoubleClick={(e) => { if (e.target === e.currentTarget) toggleSecret(item); }}
-                  title={isSecretItem(item) ? 'Dubbelklik rechts voor terug naar normaal' : 'Dubbelklik rechts om naar Secret te verplaatsen'}
-                  style={{ marginTop: '8px', display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center', minHeight: '20px', cursor: 'default' }}>
+                <div style={{ marginTop: '8px', display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
                   {item.tags && item.tags.trim().length > 0 ? (
                     item.tags.split(',').map(t => <span key={t} style={{ backgroundColor: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', color: '#666', fontWeight:'500' }}>#{t.trim()}</span>)
                   ) : activeTab === 'inbox' && (() => {
