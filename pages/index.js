@@ -655,11 +655,8 @@ export default function Home() {
               );
             })()}
 
-            {/* CONTENT BODY — dubbelklik op lege ruimte toggelt Secret-markering */}
-            <div
-              onDoubleClick={(e) => { if (e.target === e.currentTarget) toggleSecret(item); }}
-              title={isSecretItem(item) ? 'Dubbelklik op lege ruimte om terug uit Secret te halen' : 'Dubbelklik op lege ruimte om naar Secret te verplaatsen'}
-              style={{ padding: '0 12px 12px 12px', flex: 1 }}>
+            {/* CONTENT BODY */}
+            <div style={{ padding: '0 12px 12px 12px', flex: 1 }}>
               {item.note && editingId !== item.id && ( <div style={{background:'#fff9db', padding:'6px 8px', borderRadius:'4px', fontSize:'12px', color:'#444', marginTop:'8px', borderLeft:'3px solid #fcc419', lineHeight:'1.4'}}>{item.note}</div> )}
               {editingId === item.id ? (
                 <div style={{marginTop:'10px', padding:'10px', background:'#f9f9f9', borderRadius:'8px'}}>
@@ -700,7 +697,10 @@ export default function Home() {
                 <button onClick={() => restoreItem(item.id)} title="Restore" style={{background:'none', border:'none', cursor:'pointer', fontSize:'13px', color:'#0070f3', fontWeight:'600', padding:0}}>↩️ Restore</button>
               </div>
             ) : (
-              <div style={{borderTop:'1px solid #f0f0f0', padding:'8px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fafafa', minHeight:'40px'}}>
+              <div
+                onDoubleClick={(e) => { if (e.target === e.currentTarget) toggleSecret(item); }}
+                title={isSecretItem(item) ? 'Dubbelklik in de grijze ruimte om terug uit Secret te halen' : 'Dubbelklik in de grijze ruimte om naar Secret te verplaatsen'}
+                style={{borderTop:'1px solid #f0f0f0', padding:'8px 12px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#fafafa', minHeight:'40px'}}>
                 <button onClick={() => findConnections(item)} style={{background:'none', border:'none', color: showRelatedFor===item.id ? '#0070f3' : '#999', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px', padding:0}}>🔗 <span style={{fontSize:'11px', fontWeight:'600'}}>Related</span></button>
                 <div style={{display:'flex', gap:'12px'}}>
                    <button onClick={() => startEditing(item)} title="Edit" style={{background:'none', border:'none', cursor:'pointer', fontSize:'14px', color:'#999', padding:0}}>✏️</button>
