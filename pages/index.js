@@ -46,6 +46,10 @@ export default function Home() {
   const [learnResult, setLearnResult] = useState(null); // { suggestions, overrides_count, notion_url }
   const [learnError, setLearnError] = useState(null);
 
+  // Secret-laag — onthuld via triple-click op Privé-tab binnen 1 sec. Niet persistent.
+  const [secretRevealed, setSecretRevealed] = useState(false);
+  const priveClickTimesRef = useRef([]);
+
   // 1. INITIALIZATION
   useEffect(() => {
     const savedPass = localStorage.getItem('MY_POCKET_PASS');
@@ -298,6 +302,43 @@ export default function Home() {
   }
 
   // Helpers
+  function isSecretItem(item) {
+    if (!item.tags) return false;
+    const t = item.tags.toLowerCase();
+    return /(^|,)\s*(secret|adult)\s*(,|$)/.test(t);
+  }
+
+  async function toggleSecret(item) {
+    const currentTags = (item.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+    const isSecret = isSecretItem(item);
+    let newTags;
+    if (isSecret) {
+      // Terug halen: beide tags weg
+      newTags = currentTags.filter(t => !['secret', 'adult'].includes(t.toLowerCase()));
+    } else {
+      // Naar Secret: tag 'secret' toevoegen (adult blijft als die er al was)
+      newTags = [...currentTags.filter(t => t.toLowerCase() !== 'secret'), 'secret'];
+    }
+    const newTagsStr = newTags.join(', ');
+    setBookmarks(prev => prev.map(b => b.id === item.id ? { ...b, tags: newTagsStr } : b));
+    await fetch('/api/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: item.id, tags: newTagsStr, password }),
+    });
+  }
+
+  function handlePriveTabClick() {
+    // Triple-click binnen 1 sec onthult Secret
+    const now = Date.now();
+    priveClickTimesRef.current = [...priveClickTimesRef.current, now].filter(t => now - t < 1000);
+    if (priveClickTimesRef.current.length >= 3 && !secretRevealed) {
+      setSecretRevealed(true);
+      priveClickTimesRef.current = [];
+    }
+    setActiveTab('prive');
+  }
+
   function findConnections(targetItem) {
     if (showRelatedFor === targetItem.id) { setShowRelatedFor(null); return; }
     const stopWords = ['the','is','a','an','and','or','for','to','in','of','with','at','from','by','on','how','what','why'];
@@ -389,7 +430,11 @@ export default function Home() {
     const isArchived = item.is_archived === true;
     const isDeleted = item.deleted_at != null;
     const isPrive = item.triage?.verdict === 'prive';
+    const isSecret = isSecretItem(item);
     const hasTags = item.tags && item.tags.trim().length > 0;
+    // Secret-items leven alleen in de Secret-tab (verborgen uit alle andere tabs, ook Deleted)
+    if (activeTab === 'secret' && (!isSecret || isDeleted)) return false;
+    if (activeTab !== 'secret' && isSecret) return false;
     // Privé-items leven in eigen tab; uit inbox/vault houden zodat werk-zicht schoon blijft.
     if (activeTab === 'prive' && (!isPrive || isDeleted)) return false;
     if ((activeTab === 'inbox' || activeTab === 'archive') && isPrive) return false;
@@ -409,12 +454,14 @@ export default function Home() {
     const isArchived = item.is_archived === true;
     const isDeleted = item.deleted_at != null;
     const isPrive = item.triage?.verdict === 'prive';
-    if (isDeleted) acc.deleted++;
+    const isSecret = isSecretItem(item);
+    if (isSecret && !isDeleted) acc.secret++;
+    else if (isDeleted) acc.deleted++;
     else if (isPrive) acc.prive++;
     else if (isArchived) acc.archive++;
     else acc.inbox++;
     return acc;
-  }, { inbox: 0, archive: 0, prive: 0, deleted: 0 });
+  }, { inbox: 0, archive: 0, prive: 0, deleted: 0, secret: 0 });
 
   if (!isLoggedIn) return <div style={{height:'100vh', display:'flex', alignItems:'center', justifyContent:'center'}}><form onSubmit={e => handleLogin(e, null)} style={{display:'flex', flexDirection:'column', gap:'10px'}}><h1>My Pocket 🔒</h1><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" style={{padding:'10px'}} /><button style={{padding:'10px'}}>Unlock</button></form></div>;
 
@@ -442,7 +489,10 @@ export default function Home() {
            <div style={{background:'#f0f0f0', borderRadius:'20px', padding:'3px', display:'flex'}}>
               <button onClick={()=>setActiveTab('inbox')} style={{background: activeTab==='inbox' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='inbox'?'bold':'normal', boxShadow: activeTab==='inbox'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Inbox <span style={{opacity:0.5, fontSize:'11px', marginLeft:'2px', fontWeight:'normal'}}>{tabCounts.inbox}</span></button>
               <button onClick={()=>setActiveTab('archive')} style={{background: activeTab==='archive' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='archive'?'bold':'normal', boxShadow: activeTab==='archive'?'0 1px 3px rgba(0,0,0,0.1)': 'none'}}>Vault <span style={{opacity:0.5, fontSize:'11px', marginLeft:'2px', fontWeight:'normal'}}>{tabCounts.archive}</span></button>
-              <button onClick={()=>setActiveTab('prive')} style={{background: activeTab==='prive' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='prive'?'bold':'normal', boxShadow: activeTab==='prive'?'0 1px 3px rgba(0,0,0,0.1)': 'none', color: activeTab==='prive' ? '#6b21a8' : '#666'}}>Privé <span style={{opacity:0.5, fontSize:'11px', marginLeft:'2px', fontWeight:'normal'}}>{tabCounts.prive}</span></button>
+              <button onClick={handlePriveTabClick} style={{background: activeTab==='prive' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='prive'?'bold':'normal', boxShadow: activeTab==='prive'?'0 1px 3px rgba(0,0,0,0.1)': 'none', color: activeTab==='prive' ? '#6b21a8' : '#666'}}>Privé <span style={{opacity:0.5, fontSize:'11px', marginLeft:'2px', fontWeight:'normal'}}>{tabCounts.prive}</span></button>
+              {secretRevealed && (
+                <button onClick={()=>setActiveTab('secret')} style={{background: activeTab==='secret' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='secret'?'bold':'normal', boxShadow: activeTab==='secret'?'0 1px 3px rgba(0,0,0,0.1)': 'none', color: activeTab==='secret' ? '#000' : '#666'}}>🔒 Secret <span style={{opacity:0.5, fontSize:'11px', marginLeft:'2px', fontWeight:'normal'}}>{tabCounts.secret}</span></button>
+              )}
               <button onClick={()=>setActiveTab('deleted')} style={{background: activeTab==='deleted' ? 'white' : 'transparent', border:'none', padding:'6px 12px', borderRadius:'16px', cursor:'pointer', fontSize:'13px', fontWeight: activeTab==='deleted'?'bold':'normal', boxShadow: activeTab==='deleted'?'0 1px 3px rgba(0,0,0,0.1)': 'none', color: activeTab==='deleted' ? '#d32f2f' : '#666'}}>Deleted <span style={{opacity:0.5, fontSize:'11px', marginLeft:'2px', fontWeight:'normal'}}>{tabCounts.deleted}</span></button>
            </div>
         </div>
@@ -471,7 +521,7 @@ export default function Home() {
       })()}
 
       {/* INPUT */}
-      {(activeTab === 'inbox' || activeTab === 'archive' || activeTab === 'prive') && (
+      {(activeTab === 'inbox' || activeTab === 'archive' || activeTab === 'prive' || activeTab === 'secret') && (
         <div style={{ backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
           <form onSubmit={handleSave} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste link..." required style={{ flex: 2, minWidth: '180px', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', fontSize:'15px' }} />
@@ -618,7 +668,10 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                <div style={{ marginTop: '8px', display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <div
+                  onDoubleClick={(e) => { if (e.target === e.currentTarget) toggleSecret(item); }}
+                  title={isSecretItem(item) ? 'Dubbelklik rechts voor terug naar normaal' : 'Dubbelklik rechts om naar Secret te verplaatsen'}
+                  style={{ marginTop: '8px', display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center', minHeight: '20px', cursor: 'default' }}>
                   {item.tags && item.tags.trim().length > 0 ? (
                     item.tags.split(',').map(t => <span key={t} style={{ backgroundColor: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', color: '#666', fontWeight:'500' }}>#{t.trim()}</span>)
                   ) : activeTab === 'inbox' && (() => {
